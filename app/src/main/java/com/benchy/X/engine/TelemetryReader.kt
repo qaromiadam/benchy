@@ -302,4 +302,220 @@ object TelemetryReader {
     private fun parseMeminfoKb(line: String): Long {
         return line.replace(Regex("[^0-9]"), "").toLongOrNull() ?: 0L
     }
+
+    // --- Extended Techy Suite Modules ---
+
+    fun readNetworkDiagnostics(context: Context): NetworkDiagnostics {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        val active = cm?.activeNetwork
+        val caps = if (active != null) cm.getNetworkCapabilities(active) else null
+        val link = if (active != null) cm.getLinkProperties(active) else null
+
+        val transport = when {
+            caps == null -> "Offline"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "Cellular"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) -> "VPN Tunnel"
+            else -> "Connected"
+        }
+        val downMbps = (caps?.linkDownstreamBandwidthKbps ?: 0) / 1000f
+        val upMbps = (caps?.linkUpstreamBandwidthKbps ?: 0) / 1000f
+        val isMetered = cm?.isActiveNetworkMetered ?: false
+        val hasVpn = caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) ?: false
+        val dnsList = link?.dnsServers?.mapNotNull { it.hostAddress }?.joinToString(", ").orEmpty().ifBlank { "Auto" }
+        val iface = link?.interfaceName ?: "N/A"
+
+        return NetworkDiagnostics(
+            transport = transport,
+            downstreamMbps = downMbps,
+            upstreamMbps = upMbps,
+            interfaceName = iface,
+            dnsServers = dnsList,
+            isMetered = isMetered,
+            vpnActive = hasVpn
+        )
+    }
+
+    fun measureNetworkLatency(): LatencyProbeResult {
+        val dnsStart = System.nanoTime()
+        val resolvedIp = runCatching {
+            java.net.InetAddress.getByName("dns.google").hostAddress
+        }.getOrNull()
+        val dnsMs = ((System.nanoTime() - dnsStart) / 1_000_000.0).coerceAtLeast(0.1)
+
+        val tcpCloudflare = probeTcpPort("1.1.1.1", 443)
+        val tcpGoogle = probeTcpPort("8.8.8.8", 443)
+
+        return LatencyProbeResult(
+            dnsLookupMs = dnsMs,
+            cloudflareTcpMs = tcpCloudflare,
+            googleTcpMs = tcpGoogle,
+            resolvedAddress = resolvedIp ?: "Offline"
+        )
+    }
+
+    private fun probeTcpPort(host: String, port: Int): Double? {
+        return runCatching {
+            val start = System.nanoTime()
+            java.net.Socket().use { sock ->
+                sock.connect(java.net.InetSocketAddress(host, port), 2500)
+            }
+            (System.nanoTime() - start) / 1_000_000.0
+        }.getOrNull()
+    }
+
+    fun readProcessAndSystemStats(): ProcessSystemStats {
+        val elapsedMs = android.os.SystemClock.elapsedRealtime().coerceAtLeast(1L)
+        val awakeMs = android.os.SystemClock.uptimeMillis().coerceAtLeast(0L)
+        val sleepMs = (elapsedMs - awakeMs).coerceAtLeast(0L)
+        val deepSleepPct = ((sleepMs.toDouble() / elapsedMs.toDouble()) * 100.0).toFloat().coerceIn(0f, 100f)
+
+        val loadAvg = runCatching {
+            File("/proc/loadavg").readText().trim().split(Regex("\\s+")).take(3).joinToString(" / ")
+        }.getOrDefault("Protected")
+
+        val rt = Runtime.getRuntime()
+        val jvmUsedMb = (rt.totalMemory() - rt.freeMemory()) / (1024f * 1024f)
+        val jvmMaxMb = rt.maxMemory() / (1024f * 1024f)
+        val nativeMb = android.os.Debug.getNativeHeapAllocatedSize() / (1024f * 1024f)
+        val activeThreads = Thread.activeCount()
+
+        return ProcessSystemStats(
+            uptimeHours = elapsedMs / 3_600_000f,
+            deepSleepPercent = deepSleepPct,
+            loadAverage = loadAvg,
+            jvmHeapUsedMb = jvmUsedMb,
+            jvmHeapMaxMb = jvmMaxMb,
+            nativeHeapMb = nativeMb,
+            activeThreads = activeThreads
+        )
+    }
+
+    fun readAudioAndCodecCapabilities(context: Context): AudioCodecCapabilities {
+        val audioMgr = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+        val sampleRate = audioMgr?.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE) ?: "48000"
+        val framesPerBuf = audioMgr?.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER) ?: "256"
+
+        val codecs = runCatching {
+            android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
+        }.getOrNull().orEmpty()
+
+        val hwDecoders = mutableListOf<String>()
+        var totalHwCount = 0
+        for (info in codecs) {
+            if (info.isEncoder) continue
+            val isHw = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                info.isHardwareAccelerated
+            } else {
+                !info.name.startsWith("OMX.google.") && !info.name.startsWith("c2.android.")
+            }
+            if (isHw) {
+                totalHwCount++
+                val types = info.supportedTypes.joinToString(",") {
+                    it.substringAfter('/').uppercase(Locale.US)
+                }
+                hwDecoders += "${info.name.take(26)} ($types)"
+            }
+        }
+
+        return AudioCodecCapabilities(
+            outputSampleRateHz = sampleRate,
+            framesPerBuffer = framesPerBuf,
+            hardwareDecoderCount = totalHwCount,
+            sampleHardwareCodecs = hwDecoders.distinct().take(6)
+        )
+    }
+
+    fun runCryptoAndSecurityBench(context: Context): CryptoSecurityResult {
+        val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+        val isDeviceSecure = keyguard?.isDeviceSecure ?: false
+        val isTestKeys = Build.TAGS?.contains("test-keys") == true
+        val adbEnabled = runCatching {
+            android.provider.Settings.Global.getInt(
+                context.contentResolver,
+                android.provider.Settings.Global.ADB_ENABLED,
+                0
+            ) == 1
+        }.getOrDefault(false)
+        val hasSuBinary = listOf("/system/bin/su", "/system/xbin/su", "/sbin/su", "/su/bin/su")
+            .any { File(it).exists() }
+
+        // Benchmark real AES-256-GCM encryption throughput & SHA-512 hashing throughput
+        val block = ByteArray(1024 * 1024) { (it * 31).toByte() }
+        val iterations = 16
+
+        val aesMbPerSec = runCatching {
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            val key = javax.crypto.spec.SecretKeySpec(ByteArray(32) { 0x42 }, "AES")
+            val iv = ByteArray(12) { 0x11 }
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, key, javax.crypto.spec.GCMParameterSpec(128, iv))
+            val start = System.nanoTime()
+            repeat(iterations) { cipher.update(block) }
+            cipher.doFinal()
+            val sec = ((System.nanoTime() - start) / 1_000_000_000.0).coerceAtLeast(0.001)
+            (iterations.toDouble() / sec)
+        }.getOrDefault(0.0)
+
+        val sha512MbPerSec = runCatching {
+            val md = java.security.MessageDigest.getInstance("SHA-512")
+            val start = System.nanoTime()
+            repeat(iterations * 2) { md.update(block) }
+            md.digest()
+            val sec = ((System.nanoTime() - start) / 1_000_000_000.0).coerceAtLeast(0.001)
+            ((iterations * 2).toDouble() / sec)
+        }.getOrDefault(0.0)
+
+        return CryptoSecurityResult(
+            aes256GcmMbPerSec = aesMbPerSec,
+            sha512MbPerSec = sha512MbPerSec,
+            deviceLockSecure = isDeviceSecure,
+            adbEnabled = adbEnabled,
+            officialReleaseKeys = !isTestKeys,
+            suBinaryPresent = hasSuBinary
+        )
+    }
 }
+
+data class NetworkDiagnostics(
+    val transport: String,
+    val downstreamMbps: Float,
+    val upstreamMbps: Float,
+    val interfaceName: String,
+    val dnsServers: String,
+    val isMetered: Boolean,
+    val vpnActive: Boolean
+)
+
+data class LatencyProbeResult(
+    val dnsLookupMs: Double,
+    val cloudflareTcpMs: Double?,
+    val googleTcpMs: Double?,
+    val resolvedAddress: String
+)
+
+data class ProcessSystemStats(
+    val uptimeHours: Float,
+    val deepSleepPercent: Float,
+    val loadAverage: String,
+    val jvmHeapUsedMb: Float,
+    val jvmHeapMaxMb: Float,
+    val nativeHeapMb: Float,
+    val activeThreads: Int
+)
+
+data class AudioCodecCapabilities(
+    val outputSampleRateHz: String,
+    val framesPerBuffer: String,
+    val hardwareDecoderCount: Int,
+    val sampleHardwareCodecs: List<String>
+)
+
+data class CryptoSecurityResult(
+    val aes256GcmMbPerSec: Double,
+    val sha512MbPerSec: Double,
+    val deviceLockSecure: Boolean,
+    val adbEnabled: Boolean,
+    val officialReleaseKeys: Boolean,
+    val suBinaryPresent: Boolean
+)

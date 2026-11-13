@@ -6,7 +6,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.Uri
 import android.os.PowerManager
+import android.provider.DocumentsContract
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.benchy.X.data.AccentPreset
@@ -24,15 +26,24 @@ import com.benchy.X.data.TempUnit
 import com.benchy.X.data.ThemeMode
 import com.benchy.X.data.UserPreferences
 import com.benchy.X.engine.AntivirusScanResult
+import com.benchy.X.engine.AudioCodecCapabilities
 import com.benchy.X.engine.BenchmarkScorer
+import com.benchy.X.engine.CryptoSecurityResult
 import com.benchy.X.engine.DeviceHealthEvaluator
 import com.benchy.X.engine.DeviceHealthReport
 import com.benchy.X.engine.DeviceTelemetry
+import com.benchy.X.engine.FileScanProgress
+import com.benchy.X.engine.FileScanResult
+import com.benchy.X.engine.FileSecurityAnalyzer
+import com.benchy.X.engine.FlaggedFile
 import com.benchy.X.engine.GpuBenchmarkResult
 import com.benchy.X.engine.HardwareSpecs
+import com.benchy.X.engine.LatencyProbeResult
 import com.benchy.X.engine.NativeBridge
+import com.benchy.X.engine.NetworkDiagnostics
 import com.benchy.X.engine.PackageScanProgress
 import com.benchy.X.engine.PackageSecurityAnalyzer
+import com.benchy.X.engine.ProcessSystemStats
 import com.benchy.X.engine.SensorSummaryItem
 import com.benchy.X.engine.TelemetryReader
 import com.benchy.X.locale.LocaleManagerHelper
@@ -57,6 +68,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.ceil
 
@@ -69,8 +81,10 @@ data class QuickScanUiState(
 
 data class AntivirusUiState(
     val isScanning: Boolean = false,
-    val progress: PackageScanProgress? = null,
-    val result: AntivirusScanResult? = null
+    val packageProgress: PackageScanProgress? = null,
+    val fileProgress: FileScanProgress? = null,
+    val packageResult: AntivirusScanResult? = null,
+    val fileResult: FileScanResult? = null
 )
 
 data class ThrottleSample(
@@ -114,7 +128,11 @@ data class TechyBenchmarkUiState(
     val ramRunning: Boolean = false,
     val ramResult: NativeBridge.RamBenchResult? = null,
     val storageRunning: Boolean = false,
-    val storageResult: NativeBridge.StorageBenchResult? = null
+    val storageResult: NativeBridge.StorageBenchResult? = null,
+    val pingRunning: Boolean = false,
+    val latencyResult: LatencyProbeResult? = null,
+    val cryptoRunning: Boolean = false,
+    val cryptoResult: CryptoSecurityResult? = null
 )
 
 class BenchyViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
@@ -158,6 +176,16 @@ class BenchyViewModel(application: Application) : AndroidViewModel(application),
         TelemetryReader.listDeviceSensors(context)
     ).asStateFlow()
 
+    val audioCodecCaps: StateFlow<AudioCodecCapabilities> = MutableStateFlow(
+        TelemetryReader.readAudioAndCodecCapabilities(context)
+    ).asStateFlow()
+
+    private val _networkDiag = MutableStateFlow(TelemetryReader.readNetworkDiagnostics(context))
+    val networkDiag: StateFlow<NetworkDiagnostics> = _networkDiag.asStateFlow()
+
+    private val _processStats = MutableStateFlow(TelemetryReader.readProcessAndSystemStats())
+    val processStats: StateFlow<ProcessSystemStats> = _processStats.asStateFlow()
+
     val healthReport: StateFlow<DeviceHealthReport> = combine(
         _telemetry,
         preferences
@@ -200,11 +228,17 @@ class BenchyViewModel(application: Application) : AndroidViewModel(application),
     private fun startLiveTelemetryTicker() {
         viewModelScope.launch {
             while (isActive) {
-                val updated = withContext(Dispatchers.IO) {
-                    TelemetryReader.readDeviceTelemetry(context)
+                val (updated, net, proc) = withContext(Dispatchers.IO) {
+                    Triple(
+                        TelemetryReader.readDeviceTelemetry(context),
+                        TelemetryReader.readNetworkDiagnostics(context),
+                        TelemetryReader.readProcessAndSystemStats()
+                    )
                 }
                 _telemetry.value = updated
-                delay(1500L)
+                _networkDiag.value = net
+                _processStats.value = proc
+                delay(2000L)
             }
         }
     }
@@ -245,6 +279,10 @@ class BenchyViewModel(application: Application) : AndroidViewModel(application),
 
     fun setAlertsMuted(muted: Boolean) {
         viewModelScope.launch { prefsRepo.setAlertsMuted(muted) }
+    }
+
+    fun setSkipSystemApps(skip: Boolean) {
+        viewModelScope.launch { prefsRepo.setSkipSystemApps(skip) }
     }
 
     fun completeOnboarding() {
@@ -405,41 +443,63 @@ class BenchyViewModel(application: Application) : AndroidViewModel(application),
         LongScanCoordinator.cancelLongScan(context)
     }
 
-    // --- Antivirus & App Security (Thorough Paced Per-Package Audit) ---
+    // --- Antivirus & App + File / Zip-Bomb Security ---
+
+    fun hasFileScanPermission(): Boolean = FileSecurityAnalyzer.hasFileScanPermission(context)
 
     fun runAntivirusScan() {
         if (_antivirusState.value.isScanning) return
         viewModelScope.launch {
             _antivirusState.value = _antivirusState.value.copy(
                 isScanning = true,
-                progress = null
+                packageProgress = null,
+                fileProgress = null
             )
-            val result = withContext(Dispatchers.IO) {
+            val skipSystem = preferences.value.skipSystemApps
+            val (pkgResult, fileResult) = withContext(Dispatchers.IO) {
                 val allowlisted = repo.getAllowlistedPackages()
-                PackageSecurityAnalyzer.scanInstalledAppsWithProgress(
+                val pkgRes = PackageSecurityAnalyzer.scanInstalledAppsWithProgress(
                     context = context,
                     allowlistedPackages = allowlisted,
-                    minDurationMs = 10_000L,
+                    skipSystemApps = skipSystem,
+                    minDurationMs = 9_000L,
                     onProgress = { progress ->
-                        _antivirusState.value = _antivirusState.value.copy(progress = progress)
+                        _antivirusState.value = _antivirusState.value.copy(packageProgress = progress)
                     }
                 )
+                val fileRes = FileSecurityAnalyzer.scanDeviceFilesWithProgress(
+                    context = context,
+                    minDurationMs = 5_000L,
+                    onProgress = { fp ->
+                        _antivirusState.value = _antivirusState.value.copy(
+                            packageProgress = null,
+                            fileProgress = fp
+                        )
+                    }
+                )
+                pkgRes to fileRes
             }
             _antivirusState.value = AntivirusUiState(
                 isScanning = false,
-                progress = null,
-                result = result
+                packageProgress = null,
+                fileProgress = null,
+                packageResult = pkgResult,
+                fileResult = fileResult
             )
 
-            val threats = result.flaggedPackages.size
+            val totalThreats = pkgResult.flaggedPackages.size + fileResult.flaggedFiles.size
             NotificationHelper.postResultAlert(
                 context = context,
-                isPositive = threats == 0,
-                title = if (threats == 0) "Antivirus Scan: 0 Threats" else "Antivirus Alert: $threats Flagged",
-                body = if (threats == 0) {
-                    "Inspected ${result.totalPackagesInspected} packages. Your device looks clean."
+                isPositive = totalThreats == 0,
+                title = if (totalThreats == 0) {
+                    "Antivirus Scan: 0 Threats"
                 } else {
-                    "${result.flaggedPackages.first().appLabel} and ${threats - 1} other(s) flagged for review."
+                    "Antivirus Alert: $totalThreats Flagged"
+                },
+                body = if (totalThreats == 0) {
+                    "Inspected ${pkgResult.totalPackagesInspected} apps & ${fileResult.totalFilesInspected} files. Clean."
+                } else {
+                    "${pkgResult.flaggedPackages.size} app(s) and ${fileResult.flaggedFiles.size} file(s)/zip-bombs flagged."
                 },
                 alertsMuted = preferences.value.alertsMuted,
                 notificationId = NotificationHelper.NOTIF_ID_ANTIVIRUS
@@ -447,12 +507,63 @@ class BenchyViewModel(application: Application) : AndroidViewModel(application),
         }
     }
 
+    fun scanSafFolder(treeUri: Uri) {
+        if (_antivirusState.value.isScanning) return
+        viewModelScope.launch {
+            _antivirusState.value = _antivirusState.value.copy(
+                isScanning = true,
+                packageProgress = null,
+                fileProgress = null
+            )
+            val fileRes = withContext(Dispatchers.IO) {
+                FileSecurityAnalyzer.scanSafFolderWithProgress(
+                    context = context,
+                    treeUri = treeUri,
+                    onProgress = { fp ->
+                        _antivirusState.value = _antivirusState.value.copy(fileProgress = fp)
+                    }
+                )
+            }
+            _antivirusState.value = _antivirusState.value.copy(
+                isScanning = false,
+                fileProgress = null,
+                fileResult = fileRes
+            )
+        }
+    }
+
+    fun deleteFlaggedFile(flagged: FlaggedFile) {
+        viewModelScope.launch {
+            val deleted = withContext(Dispatchers.IO) {
+                if (flagged.contentUri != null) {
+                    runCatching {
+                        DocumentsContract.deleteDocument(context.contentResolver, flagged.contentUri)
+                    }.getOrDefault(false)
+                } else {
+                    runCatching { File(flagged.filePath).delete() }.getOrDefault(false)
+                }
+            }
+            if (deleted) {
+                dismissFlaggedFile(flagged.id)
+            }
+        }
+    }
+
+    fun dismissFlaggedFile(id: String) {
+        val current = _antivirusState.value.fileResult ?: return
+        _antivirusState.value = _antivirusState.value.copy(
+            fileResult = current.copy(
+                flaggedFiles = current.flaggedFiles.filterNot { it.id == id }
+            )
+        )
+    }
+
     fun allowlistApp(packageName: String, appLabel: String) {
         viewModelScope.launch {
             repo.allowlistPackage(packageName, appLabel)
-            val current = _antivirusState.value.result ?: return@launch
+            val current = _antivirusState.value.packageResult ?: return@launch
             _antivirusState.value = _antivirusState.value.copy(
-                result = current.copy(
+                packageResult = current.copy(
                     flaggedPackages = current.flaggedPackages.filterNot { it.packageName == packageName }
                 )
             )
@@ -467,10 +578,11 @@ class BenchyViewModel(application: Application) : AndroidViewModel(application),
     }
 
     fun setAutoScan(enabled: Boolean, intervalHours: Int = preferences.value.autoScanIntervalHours) {
+        val sanitizedHours = intervalHours.coerceIn(1, 720)
         viewModelScope.launch {
-            prefsRepo.setAutoScan(enabled, intervalHours)
+            prefsRepo.setAutoScan(enabled, sanitizedHours)
             if (enabled) {
-                AntivirusScanWorker.schedule(context, intervalHours)
+                AntivirusScanWorker.schedule(context, sanitizedHours)
             } else {
                 AntivirusScanWorker.cancel(context)
             }
@@ -533,14 +645,51 @@ class BenchyViewModel(application: Application) : AndroidViewModel(application),
         }
     }
 
+    fun runNetworkPing() {
+        if (_techyState.value.pingRunning) return
+        viewModelScope.launch {
+            _techyState.value = _techyState.value.copy(pingRunning = true)
+            val (diag, latency) = withContext(Dispatchers.IO) {
+                TelemetryReader.readNetworkDiagnostics(context) to TelemetryReader.measureNetworkLatency()
+            }
+            _networkDiag.value = diag
+            _techyState.value = _techyState.value.copy(
+                pingRunning = false,
+                latencyResult = latency
+            )
+        }
+    }
+
+    fun runCryptoBenchmark() {
+        if (_techyState.value.cryptoRunning) return
+        viewModelScope.launch {
+            _techyState.value = _techyState.value.copy(cryptoRunning = true)
+            val res = withContext(Dispatchers.Default) {
+                TelemetryReader.runCryptoAndSecurityBench(context)
+            }
+            _techyState.value = _techyState.value.copy(
+                cryptoRunning = false,
+                cryptoResult = res
+            )
+        }
+    }
+
     fun setGpuStressRunning(running: Boolean) {
         _techyState.value = _techyState.value.copy(gpuRunning = running)
     }
 
-    fun updateGpuStats(avgFps: Double, onePercentLow: Double, dropPct: Double, renderer: String, score2dFps: Double) {
+    fun updateGpuStats(
+        instant3dFps: Double,
+        avgFps: Double,
+        onePercentLow: Double,
+        dropPct: Double,
+        renderer: String,
+        score2dFps: Double
+    ) {
         _techyState.value = _techyState.value.copy(
             gpuResult = GpuBenchmarkResult(
                 score2dFps = score2dFps,
+                instant3dFps = instant3dFps,
                 avg3dFps = avgFps,
                 onePercentLowFps = onePercentLow,
                 thermalDropPercent = dropPct,
@@ -656,8 +805,24 @@ class BenchyViewModel(application: Application) : AndroidViewModel(application),
         repo.exportBatterySamplesJson()
     }
 
+    suspend fun generateBatteryTxt(): String = withContext(Dispatchers.IO) {
+        repo.exportBatterySamplesTxt()
+    }
+
     fun previewAlertSound(isGood: Boolean) {
         NotificationHelper.playInAppTone(context, isGood)
+    }
+
+    fun sendTestNotification(isGood: Boolean) {
+        NotificationHelper.postResultAlert(
+            context = context,
+            isPositive = isGood,
+            title = if (isGood) "Benchy Test Alert (Ding-Ding)" else "Benchy Test Alert (Dong-Dong)",
+            body = "Notification channel audio verification.",
+            alertsMuted = preferences.value.alertsMuted,
+            notificationId = NotificationHelper.NOTIF_ID_ALERT,
+            useUniqueTestId = true
+        )
     }
 
     override fun onCleared() {

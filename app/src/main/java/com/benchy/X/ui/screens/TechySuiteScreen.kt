@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -25,16 +26,20 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.DeveloperBoard
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.EnhancedEncryption
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Thermostat
 import androidx.compose.material.icons.outlined.TrendingDown
 import androidx.compose.material3.Button
@@ -55,6 +60,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,9 +77,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.benchy.X.R
 import com.benchy.X.data.BatterySampleEntity
 import com.benchy.X.data.UserPreferences
+import com.benchy.X.engine.AudioCodecCapabilities
 import com.benchy.X.engine.BenchyGlStressRenderer
 import com.benchy.X.engine.DeviceTelemetry
+import com.benchy.X.engine.GpuBenchmarkResult
 import com.benchy.X.engine.HardwareSpecs
+import com.benchy.X.engine.NetworkDiagnostics
+import com.benchy.X.engine.ProcessSystemStats
 import com.benchy.X.engine.SensorSummaryItem
 import com.benchy.X.engine.TelemetryReader
 import com.benchy.X.locale.AutoText
@@ -105,17 +115,30 @@ fun TechySuiteScreen(
     throttleState: ThrottleTestUiState,
     batterySamples: List<BatterySampleEntity>,
     batteryAnalytics: BatteryAnalytics,
+    networkDiag: NetworkDiagnostics,
+    processStats: ProcessSystemStats,
+    audioCodecCaps: AudioCodecCapabilities,
     onRunCpu: () -> Unit,
     onRunRam: () -> Unit,
     onRunStorage: () -> Unit,
+    onRunNetworkPing: () -> Unit,
+    onRunCryptoBench: () -> Unit,
     onSetGpuRunning: (Boolean) -> Unit,
-    onUpdateGpuStats: (avgFps: Double, onePctLow: Double, dropPct: Double, renderer: String, score2d: Double) -> Unit,
+    onUpdateGpuStats: (
+        instant3dFps: Double,
+        avgFps: Double,
+        onePctLow: Double,
+        dropPct: Double,
+        renderer: String,
+        score2d: Double
+    ) -> Unit,
     onToggleThrottleTest: () -> Unit,
     onToggleLiveSensors: (Boolean) -> Unit,
     onStartBatteryTracker: () -> Unit,
     onStopBatteryTracker: () -> Unit,
     onGenerateCsv: suspend () -> String,
-    onGenerateJson: suspend () -> String
+    onGenerateJson: suspend () -> String,
+    onGenerateTxt: suspend () -> String
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -149,29 +172,17 @@ fun TechySuiteScreen(
         }
     }
 
-    // 2D Canvas draw-call frame counter while GPU test is active
-    var canvas2dFps by remember { mutableDoubleStateOf(60.0) }
-    var canvasTick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(techyState.gpuRunning) {
-        if (techyState.gpuRunning) {
-            var lastNs = System.nanoTime()
-            while (techyState.gpuRunning) {
-                delay(16L)
-                val now = System.nanoTime()
-                val dt = ((now - lastNs) / 1_000_000.0).coerceAtLeast(1.0)
-                lastNs = now
-                canvas2dFps = (1000.0 / dt).coerceIn(15.0, 120.0)
-                canvasTick++
+    val txtLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val txt = onGenerateTxt()
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(txt.toByteArray()) }
+                }
+                Toast.makeText(context, "Saved TXT battery log", Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-
-    // Live 1-second clock for accurate 1-Week Battery Tracker elapsed countdown
-    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(preferences.batteryTrackerActive) {
-        while (preferences.batteryTrackerActive) {
-            nowMillis = System.currentTimeMillis()
-            delay(1_000L)
         }
     }
 
@@ -183,7 +194,7 @@ fun TechySuiteScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(metrics.sectionSpacing)
         ) {
-            item {
+            item(key = "techy_header") {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     AutoText(
                         resId = R.string.techy_title,
@@ -198,8 +209,8 @@ fun TechySuiteScreen(
             }
 
             // 1. CPU Benchmark (Native C++ JNI + /sys/devices/system/cpu)
-            item {
-                BenchyCard {
+            item(key = "techy_cpu") {
+                BenchyCard(modifier = Modifier.animateContentSize()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -291,9 +302,9 @@ fun TechySuiteScreen(
                 }
             }
 
-            // 2. Thermal Throttling Stress Loop (Live Dual-Line Performance vs Temp Chart)
-            item {
-                BenchyCard {
+            // 2. Thermal Throttling Stress Loop
+            item(key = "techy_throttle") {
+                BenchyCard(modifier = Modifier.animateContentSize()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -384,134 +395,19 @@ fun TechySuiteScreen(
                 }
             }
 
-            // 3. GPU Benchmark (2D Canvas Draw Calls + OpenGL ES 3.0 3D Shader Stress)
-            item {
-                BenchyCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Outlined.GraphicEq, null, tint = MaterialTheme.colorScheme.primary)
-                            AutoText(
-                                resId = R.string.techy_gpu_title,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-                        Button(
-                            onClick = { onSetGpuRunning(!techyState.gpuRunning) },
-                            colors = if (techyState.gpuRunning) {
-                                ButtonDefaults.buttonColors(containerColor = TierCriticalRed)
-                            } else {
-                                ButtonDefaults.buttonColors()
-                            },
-                            modifier = Modifier.testTag("techy_run_gpu_btn")
-                        ) {
-                            Icon(
-                                imageVector = if (techyState.gpuRunning) Icons.Outlined.Stop else Icons.Outlined.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            AutoText(resId = if (techyState.gpuRunning) R.string.action_stop else R.string.action_start)
-                        }
-                    }
-
-                    AnimatedVisibility(visible = techyState.gpuRunning) {
-                        Column(
-                            modifier = Modifier.padding(top = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            val accent = MaterialTheme.colorScheme.primary
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(72.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.background)
-                            ) {
-                                Canvas(modifier = Modifier.fillMaxSize()) {
-                                    val t = canvasTick * 0.12f
-                                    for (i in 0 until 180) {
-                                        val x = ((i * 37 + canvasTick * 5) % size.width.toInt().coerceAtLeast(1)).toFloat()
-                                        val y = size.height * 0.5f + sin(t + i * 0.25f) * (size.height * 0.36f)
-                                        val x2 = x + cos(t + i) * 18f
-                                        drawLine(
-                                            color = accent.copy(alpha = 0.55f),
-                                            start = Offset(x, y),
-                                            end = Offset(x2, size.height - y),
-                                            strokeWidth = 2f
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "2D Canvas Stress • ${String.format(Locale.US, "%.1f", canvas2dFps)} FPS",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White,
-                                    modifier = Modifier
-                                        .align(Alignment.TopStart)
-                                        .padding(8.dp)
-                                )
-                            }
-
-                            AndroidView(
-                                factory = { ctx ->
-                                    GLSurfaceView(ctx).apply {
-                                        setEGLContextClientVersion(3)
-                                        setRenderer(
-                                            BenchyGlStressRenderer { avg, low1, drop, rendererName ->
-                                                onUpdateGpuStats(avg, low1, drop, rendererName, canvas2dFps)
-                                            }
-                                        )
-                                        renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(170.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                            )
-                        }
-                    }
-
-                    techyState.gpuResult?.let { gpu ->
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = gpu.rendererName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TechMetricBox(
-                                label = "3D Avg FPS",
-                                value = String.format(Locale.US, "%.1f", gpu.avg3dFps),
-                                sub = "2D: ${String.format(Locale.US, "%.0f", gpu.score2dFps)} FPS",
-                                modifier = Modifier.weight(1f)
-                            )
-                            TechMetricBox(
-                                label = "1% Low FPS",
-                                value = String.format(Locale.US, "%.1f", gpu.onePercentLowFps),
-                                sub = "Drop: ${String.format(Locale.US, "%.1f%%", gpu.thermalDropPercent)}",
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                }
+            // 3. GPU Benchmark (Isolated sub-composable prevents 60fps LazyColumn jank + live 3D Cube FPS HUD)
+            item(key = "techy_gpu") {
+                GpuStressSectionCard(
+                    gpuRunning = techyState.gpuRunning,
+                    gpuResult = techyState.gpuResult,
+                    onSetGpuRunning = onSetGpuRunning,
+                    onUpdateGpuStats = onUpdateGpuStats
+                )
             }
 
-            // 4. RAM Diagnostic Check (C++ Bandwidth, Latency, Buffers/Cached & zRAM)
-            item {
-                BenchyCard {
+            // 4. RAM Diagnostic Check
+            item(key = "techy_ram") {
+                BenchyCard(modifier = Modifier.animateContentSize()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -569,9 +465,9 @@ fun TechySuiteScreen(
                 }
             }
 
-            // 5. Storage Read & Write Speed Test (Sequential + Random 4K IOPS)
-            item {
-                BenchyCard {
+            // 5. Storage Read & Write Speed Test
+            item(key = "techy_storage") {
+                BenchyCard(modifier = Modifier.animateContentSize()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -629,8 +525,244 @@ fun TechySuiteScreen(
                 }
             }
 
-            // 6. Thermal Zones & Headroom
-            item {
+            // 6. Network Link & Ping Probe (NEW)
+            item(key = "techy_network") {
+                BenchyCard(modifier = Modifier.animateContentSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Outlined.NetworkCheck, null, tint = MaterialTheme.colorScheme.primary)
+                            AutoText(
+                                resId = R.string.techy_network_title,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                        Button(
+                            onClick = onRunNetworkPing,
+                            enabled = !techyState.pingRunning,
+                            modifier = Modifier.testTag("techy_run_ping_btn")
+                        ) {
+                            if (techyState.pingRunning) {
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else {
+                                AutoText(resId = R.string.action_run)
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TechMetricBox(
+                            label = "Active Transport",
+                            value = networkDiag.transport,
+                            sub = "Iface: ${networkDiag.interfaceName} • ${if (networkDiag.isMetered) "Metered" else "Unmetered"}",
+                            modifier = Modifier.weight(1f)
+                        )
+                        TechMetricBox(
+                            label = "Link Bandwidth",
+                            value = "${networkDiag.downstreamMbps.toInt()} / ${networkDiag.upstreamMbps.toInt()} Mbps",
+                            sub = if (networkDiag.vpnActive) "VPN Active" else "Direct Route",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "DNS Servers: ${networkDiag.dnsServers}",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    techyState.latencyResult?.let { lat ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TechMetricBox(
+                                label = "DNS & Cloudflare",
+                                value = String.format(Locale.US, "%.1f ms DNS", lat.dnsLookupMs),
+                                sub = lat.cloudflareTcpMs?.let { String.format(Locale.US, "1.1.1.1: %.1f ms", it) } ?: "1.1.1.1 Unreachable",
+                                modifier = Modifier.weight(1f)
+                            )
+                            TechMetricBox(
+                                label = "Google TCP:443",
+                                value = lat.googleTcpMs?.let { String.format(Locale.US, "%.1f ms", it) } ?: "Offline",
+                                sub = "Resolved ${lat.resolvedAddress}",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 7. Crypto Engine & Security Posture (NEW)
+            item(key = "techy_crypto") {
+                BenchyCard(modifier = Modifier.animateContentSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Outlined.EnhancedEncryption, null, tint = MaterialTheme.colorScheme.primary)
+                            AutoText(
+                                resId = R.string.techy_crypto_title,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                        Button(
+                            onClick = onRunCryptoBench,
+                            enabled = !techyState.cryptoRunning,
+                            modifier = Modifier.testTag("techy_run_crypto_btn")
+                        ) {
+                            if (techyState.cryptoRunning) {
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else {
+                                AutoText(resId = R.string.action_run)
+                            }
+                        }
+                    }
+                    techyState.cryptoResult?.let { crypto ->
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TechMetricBox(
+                                label = "AES-256-GCM",
+                                value = "${crypto.aes256GcmMbPerSec.toInt()} MB/s",
+                                sub = "Hardware Crypto / JCE",
+                                modifier = Modifier.weight(1f)
+                            )
+                            TechMetricBox(
+                                label = "SHA-512 Digest",
+                                value = "${crypto.sha512MbPerSec.toInt()} MB/s",
+                                sub = "Integrity Hash Throughput",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Lockscreen: ${if (crypto.deviceLockSecure) "Protected" else "None"} • ADB: ${if (crypto.adbEnabled) "Enabled" else "Off"} • Build Keys: ${if (crypto.officialReleaseKeys) "Release" else "Test-Keys"} • su binary: ${if (crypto.suBinaryPresent) "Present" else "Absent"}",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // 8. Process Heap, Load & Deep Sleep (NEW)
+            item(key = "techy_process") {
+                BenchyCard {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Outlined.Terminal, null, tint = MaterialTheme.colorScheme.primary)
+                        AutoText(
+                            resId = R.string.techy_process_title,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TechMetricBox(
+                            label = "Uptime & Deep Sleep",
+                            value = String.format(Locale.US, "%.1f hrs", processStats.uptimeHours),
+                            sub = String.format(Locale.US, "Deep Sleep: %.1f%%", processStats.deepSleepPercent),
+                            modifier = Modifier.weight(1f)
+                        )
+                        TechMetricBox(
+                            label = "JVM / Native Heap",
+                            value = "${processStats.jvmHeapUsedMb.toInt()} / ${processStats.jvmHeapMaxMb.toInt()} MB",
+                            sub = String.format(Locale.US, "Native: %.1f MB • %d threads", processStats.nativeHeapMb, processStats.activeThreads),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "/proc/loadavg (1m / 5m / 15m): ${processStats.loadAverage}",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // 9. Audio Pipeline & Hardware Codecs (NEW)
+            item(key = "techy_codecs") {
+                BenchyCard {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Outlined.AudioFile, null, tint = MaterialTheme.colorScheme.primary)
+                        AutoText(
+                            resId = R.string.techy_codecs_title,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TechMetricBox(
+                            label = "Audio HAL Pipeline",
+                            value = "${audioCodecCaps.outputSampleRateHz} Hz",
+                            sub = "${audioCodecCaps.framesPerBuffer} frames/buf",
+                            modifier = Modifier.weight(1f)
+                        )
+                        TechMetricBox(
+                            label = "HW Media Decoders",
+                            value = "${audioCodecCaps.hardwareDecoderCount} active",
+                            sub = "MediaCodecList Regular",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (audioCodecCaps.sampleHardwareCodecs.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            audioCodecCaps.sampleHardwareCodecs.forEach { codecName ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                                ) {
+                                    Text(
+                                        text = codecName,
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 10. Thermal Zones & Headroom
+            item(key = "techy_thermal_zones") {
                 BenchyCard {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -682,8 +814,8 @@ fun TechySuiteScreen(
                 }
             }
 
-            // 7. SoC, Kernel & Display Architecture Specs
-            item {
+            // 11. SoC, Kernel & Display Architecture Specs
+            item(key = "techy_specs") {
                 BenchyCard {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -723,9 +855,9 @@ fun TechySuiteScreen(
                 }
             }
 
-            // 8. Sensor Array & Live Telemetry
-            item {
-                BenchyCard {
+            // 12. Sensor Array & Live Telemetry
+            item(key = "techy_sensors") {
+                BenchyCard(modifier = Modifier.animateContentSize()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -799,149 +931,378 @@ fun TechySuiteScreen(
                 }
             }
 
-            // 9. Accurate 1-Week Battery Health & Drain Test (Unswippable Service + Live 1s Clock + CSV/JSON Export)
-            item {
-                val active = preferences.batteryTrackerActive
-                val elapsedMs = if (active && preferences.batteryTrackerStartMillis > 0L) {
-                    (nowMillis - preferences.batteryTrackerStartMillis).coerceAtLeast(0L)
+            // 13. Accurate 1-Week Battery Health & Drain Test (Isolated clock sub-composable)
+            item(key = "techy_battery") {
+                BatteryTrackerLiveCard(
+                    preferences = preferences,
+                    telemetry = telemetry,
+                    batterySamples = batterySamples,
+                    batteryAnalytics = batteryAnalytics,
+                    onStartBatteryTracker = onStartBatteryTracker,
+                    onStopBatteryTracker = onStopBatteryTracker,
+                    onExportCsv = { csvLauncher.launch("benchy_battery_7d.csv") },
+                    onExportJson = { jsonLauncher.launch("benchy_battery_7d.json") },
+                    onExportTxt = { txtLauncher.launch("benchy_battery_7d.txt") }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GpuStressSectionCard(
+    gpuRunning: Boolean,
+    gpuResult: GpuBenchmarkResult?,
+    onSetGpuRunning: (Boolean) -> Unit,
+    onUpdateGpuStats: (Double, Double, Double, Double, String, Double) -> Unit
+) {
+    var canvas2dFps by remember { mutableDoubleStateOf(60.0) }
+    val latest2dFps by rememberUpdatedState(canvas2dFps)
+    var canvasTick by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(gpuRunning) {
+        if (gpuRunning) {
+            var lastNs = System.nanoTime()
+            while (gpuRunning) {
+                delay(16L)
+                val now = System.nanoTime()
+                val dt = ((now - lastNs) / 1_000_000.0).coerceAtLeast(1.0)
+                lastNs = now
+                canvas2dFps = (1000.0 / dt).coerceIn(15.0, 120.0)
+                canvasTick++
+            }
+        }
+    }
+
+    BenchyCard(modifier = Modifier.animateContentSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Outlined.GraphicEq, null, tint = MaterialTheme.colorScheme.primary)
+                AutoText(
+                    resId = R.string.techy_gpu_title,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            Button(
+                onClick = { onSetGpuRunning(!gpuRunning) },
+                colors = if (gpuRunning) {
+                    ButtonDefaults.buttonColors(containerColor = TierCriticalRed)
                 } else {
-                    ((batterySamples.firstOrNull()?.elapsedDays ?: 0f) * 86_400_000f).toLong()
+                    ButtonDefaults.buttonColors()
+                },
+                modifier = Modifier.testTag("techy_run_gpu_btn")
+            ) {
+                Icon(
+                    imageVector = if (gpuRunning) Icons.Outlined.Stop else Icons.Outlined.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                AutoText(resId = if (gpuRunning) R.string.action_stop else R.string.action_start)
+            }
+        }
+
+        AnimatedVisibility(visible = gpuRunning) {
+            Column(
+                modifier = Modifier.padding(top = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val accent = MaterialTheme.colorScheme.primary
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(72.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val t = canvasTick * 0.12f
+                        for (i in 0 until 150) {
+                            val x = ((i * 37 + canvasTick * 5) % size.width.toInt().coerceAtLeast(1)).toFloat()
+                            val y = size.height * 0.5f + sin(t + i * 0.25f) * (size.height * 0.36f)
+                            val x2 = x + cos(t + i) * 18f
+                            drawLine(
+                                color = accent.copy(alpha = 0.55f),
+                                start = Offset(x, y),
+                                end = Offset(x2, size.height - y),
+                                strokeWidth = 2f
+                            )
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.65f),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = "2D Canvas • ${String.format(Locale.US, "%.1f", canvas2dFps)} FPS",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
                 }
-                val days = elapsedMs / 86_400_000L
-                val hrs = (elapsedMs % 86_400_000L) / 3_600_000L
-                val mins = (elapsedMs % 3_600_000L) / 60_000L
-                val secs = (elapsedMs % 60_000L) / 1000L
-                val elapsedClock = String.format(Locale.US, "%dd %02d:%02d:%02d", days, hrs, mins, secs)
 
-                BenchyCard(borderColor = if (active) TierPeakGreen else MaterialTheme.colorScheme.outline) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(
-                                Icons.Outlined.BatteryChargingFull,
-                                null,
-                                tint = if (active) TierPeakGreen else MaterialTheme.colorScheme.primary
-                            )
-                            AutoText(
-                                resId = R.string.techy_battery_title,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-                        Button(
-                            onClick = { if (active) onStopBatteryTracker() else onStartBatteryTracker() },
-                            colors = if (active) {
-                                ButtonDefaults.buttonColors(containerColor = TierCriticalRed)
-                            } else {
-                                ButtonDefaults.buttonColors()
-                            },
-                            modifier = Modifier.testTag("techy_battery_toggle_btn")
-                        ) {
-                            AutoText(resId = if (active) R.string.action_stop else R.string.action_start)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TechMetricBox(
-                            label = "Live Power Draw",
-                            value = "${telemetry.battery.voltageMv} mV • ${telemetry.battery.currentMa} mA",
-                            sub = "${String.format(Locale.US, "%.0f", telemetry.battery.powerMw)} mW (${telemetry.battery.pluggedSource})",
-                            modifier = Modifier.weight(1f)
-                        )
-                        TechMetricBox(
-                            label = "7-Day Elapsed",
-                            value = "$elapsedClock / 7d",
-                            sub = "${TelemetryReader.formatTemp(telemetry.battery.tempCelsius, preferences.tempUnit)} • ${batterySamples.size} pts",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val estMah = if (batteryAnalytics.estimatedCapacityMah > 0) {
-                            "${batteryAnalytics.estimatedCapacityMah} mAh"
-                        } else if (telemetry.battery.chargeCounterUah > 0 && telemetry.battery.levelPercent > 5) {
-                            "${((telemetry.battery.chargeCounterUah / 1000.0) / (telemetry.battery.levelPercent / 100.0)).toInt()} mAh"
-                        } else {
-                            "Sampling…"
-                        }
-                        TechMetricBox(
-                            label = "Est. Full Capacity",
-                            value = estMah,
-                            sub = "Avg ${batteryAnalytics.avgVoltageMv.takeIf { it > 0 } ?: telemetry.battery.voltageMv} mV",
-                            modifier = Modifier.weight(1f)
-                        )
-                        TechMetricBox(
-                            label = "Measured Drain Rate",
-                            value = String.format(Locale.US, "%.2f %%/hr", batteryAnalytics.drainRatePctPerHour),
-                            sub = "Peak ${TelemetryReader.formatTemp(batteryAnalytics.peakTempCelsius.takeIf { it > 0f } ?: telemetry.battery.tempCelsius, preferences.tempUnit)}",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    if (batterySamples.size >= 2) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        val lineColor = MaterialTheme.colorScheme.primary
-                        Canvas(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(58.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                                .padding(6.dp)
-                        ) {
-                            val ordered = batterySamples.reversed()
-                            val path = Path()
-                            ordered.forEachIndexed { idx, s ->
-                                val x = (idx.toFloat() / (ordered.size - 1).coerceAtLeast(1)) * size.width
-                                val y = size.height - ((s.levelPercent / 100f).coerceIn(0f, 1f) * size.height)
-                                if (idx == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                // 3D OpenGL ES 3.0 Cube with live FPS HUD overlay
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(190.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            GLSurfaceView(ctx).apply {
+                                setEGLContextClientVersion(3)
+                                setRenderer(
+                                    BenchyGlStressRenderer { instant, avg, low1, drop, rendererName ->
+                                        onUpdateGpuStats(
+                                            instant,
+                                            avg,
+                                            low1,
+                                            drop,
+                                            rendererName,
+                                            latest2dFps
+                                        )
+                                    }
+                                )
+                                renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                             }
-                            drawPath(path = path, color = lineColor, style = Stroke(width = 3f))
-                        }
-                    }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
 
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color.Black.copy(alpha = 0.72f),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(10.dp)
                     ) {
-                        OutlinedButton(
-                            onClick = { csvLauncher.launch("benchy_battery_7d.csv") },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("export_battery_csv_btn")
-                        ) {
-                            Icon(Icons.Outlined.Download, null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            AutoText(resId = R.string.techy_export_csv)
-                        }
-                        OutlinedButton(
-                            onClick = { jsonLauncher.launch("benchy_battery_7d.json") },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("export_battery_json_btn")
-                        ) {
-                            Icon(Icons.Outlined.Download, null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            AutoText(resId = R.string.techy_export_json)
-                        }
+                        val instantStr = gpuResult?.let { String.format(Locale.US, "%.1f", it.instant3dFps) } ?: "--"
+                        val avgStr = gpuResult?.let { String.format(Locale.US, "%.1f", it.avg3dFps) } ?: "--"
+                        Text(
+                            text = "3D Cube • $instantStr FPS (Avg $avgStr)",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TierPeakGreen,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
                     }
                 }
             }
+        }
+
+        gpuResult?.let { gpu ->
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = gpu.rendererName,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TechMetricBox(
+                    label = "3D Cube Live / Avg",
+                    value = "${String.format(Locale.US, "%.1f", gpu.instant3dFps)} / ${String.format(Locale.US, "%.1f", gpu.avg3dFps)} FPS",
+                    sub = "2D: ${String.format(Locale.US, "%.0f", gpu.score2dFps)} FPS",
+                    modifier = Modifier.weight(1f)
+                )
+                TechMetricBox(
+                    label = "1% Low FPS",
+                    value = String.format(Locale.US, "%.1f", gpu.onePercentLowFps),
+                    sub = "Drop: ${String.format(Locale.US, "%.1f%%", gpu.thermalDropPercent)}",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BatteryTrackerLiveCard(
+    preferences: UserPreferences,
+    telemetry: DeviceTelemetry,
+    batterySamples: List<BatterySampleEntity>,
+    batteryAnalytics: BatteryAnalytics,
+    onStartBatteryTracker: () -> Unit,
+    onStopBatteryTracker: () -> Unit,
+    onExportCsv: () -> Unit,
+    onExportJson: () -> Unit,
+    onExportTxt: () -> Unit
+) {
+    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(preferences.batteryTrackerActive) {
+        while (preferences.batteryTrackerActive) {
+            nowMillis = System.currentTimeMillis()
+            delay(1_000L)
+        }
+    }
+
+    val active = preferences.batteryTrackerActive
+    val elapsedMs = if (active && preferences.batteryTrackerStartMillis > 0L) {
+        (nowMillis - preferences.batteryTrackerStartMillis).coerceAtLeast(0L)
+    } else {
+        ((batterySamples.firstOrNull()?.elapsedDays ?: 0f) * 86_400_000f).toLong()
+    }
+    val days = elapsedMs / 86_400_000L
+    val hrs = (elapsedMs % 86_400_000L) / 3_600_000L
+    val mins = (elapsedMs % 3_600_000L) / 60_000L
+    val secs = (elapsedMs % 60_000L) / 1000L
+    val elapsedClock = String.format(Locale.US, "%dd %02d:%02d:%02d", days, hrs, mins, secs)
+
+    BenchyCard(borderColor = if (active) TierPeakGreen else MaterialTheme.colorScheme.outline) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    Icons.Outlined.BatteryChargingFull,
+                    null,
+                    tint = if (active) TierPeakGreen else MaterialTheme.colorScheme.primary
+                )
+                AutoText(
+                    resId = R.string.techy_battery_title,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            Button(
+                onClick = { if (active) onStopBatteryTracker() else onStartBatteryTracker() },
+                colors = if (active) {
+                    ButtonDefaults.buttonColors(containerColor = TierCriticalRed)
+                } else {
+                    ButtonDefaults.buttonColors()
+                },
+                modifier = Modifier.testTag("techy_battery_toggle_btn")
+            ) {
+                AutoText(resId = if (active) R.string.action_stop else R.string.action_start)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            TechMetricBox(
+                label = "Live Power Draw",
+                value = "${telemetry.battery.voltageMv} mV • ${telemetry.battery.currentMa} mA",
+                sub = "${String.format(Locale.US, "%.0f", telemetry.battery.powerMw)} mW (${telemetry.battery.pluggedSource})",
+                modifier = Modifier.weight(1f)
+            )
+            TechMetricBox(
+                label = "7-Day Elapsed",
+                value = "$elapsedClock / 7d",
+                sub = "${TelemetryReader.formatTemp(telemetry.battery.tempCelsius, preferences.tempUnit)} • ${batterySamples.size} pts",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val estMah = if (batteryAnalytics.estimatedCapacityMah > 0) {
+                "${batteryAnalytics.estimatedCapacityMah} mAh"
+            } else if (telemetry.battery.chargeCounterUah > 0 && telemetry.battery.levelPercent > 5) {
+                "${((telemetry.battery.chargeCounterUah / 1000.0) / (telemetry.battery.levelPercent / 100.0)).toInt()} mAh"
+            } else {
+                "Sampling…"
+            }
+            TechMetricBox(
+                label = "Est. Full Capacity",
+                value = estMah,
+                sub = "Avg ${batteryAnalytics.avgVoltageMv.takeIf { it > 0 } ?: telemetry.battery.voltageMv} mV",
+                modifier = Modifier.weight(1f)
+            )
+            TechMetricBox(
+                label = "Measured Drain Rate",
+                value = String.format(Locale.US, "%.2f %%/hr", batteryAnalytics.drainRatePctPerHour),
+                sub = "Peak ${TelemetryReader.formatTemp(batteryAnalytics.peakTempCelsius.takeIf { it > 0f } ?: telemetry.battery.tempCelsius, preferences.tempUnit)}",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        if (batterySamples.size >= 2) {
+            Spacer(modifier = Modifier.height(10.dp))
+            val lineColor = MaterialTheme.colorScheme.primary
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .padding(6.dp)
+            ) {
+                val ordered = batterySamples.reversed()
+                val path = Path()
+                ordered.forEachIndexed { idx, s ->
+                    val x = (idx.toFloat() / (ordered.size - 1).coerceAtLeast(1)) * size.width
+                    val y = size.height - ((s.levelPercent / 100f).coerceIn(0f, 1f) * size.height)
+                    if (idx == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                drawPath(path = path, color = lineColor, style = Stroke(width = 3f))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OutlinedButton(
+                onClick = onExportCsv,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("export_battery_csv_btn")
+            ) {
+                Icon(Icons.Outlined.Download, null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                AutoText(resId = R.string.techy_export_csv)
+            }
+            OutlinedButton(
+                onClick = onExportJson,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("export_battery_json_btn")
+            ) {
+                Icon(Icons.Outlined.Download, null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                AutoText(resId = R.string.techy_export_json)
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onExportTxt,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("export_battery_txt_btn")
+        ) {
+            Icon(Icons.Outlined.Download, null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            AutoText(resId = R.string.techy_export_txt)
         }
     }
 }

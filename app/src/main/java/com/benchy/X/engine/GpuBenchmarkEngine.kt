@@ -12,6 +12,7 @@ import kotlin.math.roundToInt
 
 data class GpuBenchmarkResult(
     val score2dFps: Double,
+    val instant3dFps: Double,
     val avg3dFps: Double,
     val onePercentLowFps: Double,
     val thermalDropPercent: Double,
@@ -19,7 +20,13 @@ data class GpuBenchmarkResult(
 )
 
 class BenchyGlStressRenderer(
-    private val onStatsSampled: (avgFps: Double, onePercentLow: Double, dropPct: Double, renderer: String) -> Unit
+    private val onStatsSampled: (
+        instantFps: Double,
+        avgFps: Double,
+        onePercentLow: Double,
+        dropPct: Double,
+        renderer: String
+    ) -> Unit
 ) : GLSurfaceView.Renderer {
 
     private var programId = 0
@@ -37,6 +44,7 @@ class BenchyGlStressRenderer(
     private var startTimeNs = 0L
     private var glRendererName = "OpenGL ES 3.0"
     private var initialWindowAvgFps = 0.0
+    private var framesRendered = 0
 
     private val cubeVertices = floatArrayOf(
         // Front face
@@ -128,6 +136,7 @@ class BenchyGlStressRenderer(
         val now = System.nanoTime()
         val dtMs = ((now - lastFrameNs) / 1_000_000.0).coerceIn(0.5, 250.0)
         lastFrameNs = now
+        framesRendered++
         frameTimesMs.add(dtMs)
         if (frameTimesMs.size > 180) frameTimesMs.removeAt(0)
 
@@ -153,16 +162,24 @@ class BenchyGlStressRenderer(
             GLES30.glDisableVertexAttribArray(0)
         }
 
-        if (frameTimesMs.size >= 15 && frameTimesMs.size % 10 == 0) {
+        if (framesRendered >= 6 && framesRendered % 6 == 0) {
+            val recentWindow = frameTimesMs.takeLast(12)
+            val instantFps = (1000.0 / recentWindow.average().coerceAtLeast(1.0)).coerceIn(1.0, 240.0)
             val avgMs = frameTimesMs.average().coerceAtLeast(1.0)
             val avgFps = (1000.0 / avgMs).coerceIn(1.0, 240.0)
             val sortedSlowest = frameTimesMs.sortedDescending()
             val topSlowCount = (sortedSlowest.size * 0.05).roundToInt().coerceAtLeast(1)
             val p1Ms = sortedSlowest.take(topSlowCount).average().coerceAtLeast(avgMs)
             val onePercentLow = (1000.0 / p1Ms).coerceIn(1.0, avgFps)
-            if (initialWindowAvgFps <= 0.0) initialWindowAvgFps = avgFps
-            val dropPct = (((initialWindowAvgFps - avgFps) / initialWindowAvgFps) * 100.0).coerceIn(0.0, 60.0)
-            onStatsSampled(avgFps, onePercentLow, dropPct, glRendererName)
+            if (initialWindowAvgFps <= 0.0 && frameTimesMs.size >= 24) {
+                initialWindowAvgFps = avgFps
+            }
+            val dropPct = if (initialWindowAvgFps > 0.0) {
+                (((initialWindowAvgFps - avgFps) / initialWindowAvgFps) * 100.0).coerceIn(0.0, 60.0)
+            } else {
+                0.0
+            }
+            onStatsSampled(instantFps, avgFps, onePercentLow, dropPct, glRendererName)
         }
     }
 

@@ -1,16 +1,24 @@
 package com.benchy.X.ui.screens
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -42,6 +50,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.NotificationsActive
@@ -56,15 +65,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,6 +91,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.benchy.X.R
 import com.benchy.X.data.AccentPreset
 import com.benchy.X.data.AppMode
@@ -88,12 +102,12 @@ import com.benchy.X.data.StorageUnit
 import com.benchy.X.data.TempUnit
 import com.benchy.X.data.ThemeMode
 import com.benchy.X.data.UserPreferences
+import com.benchy.X.engine.FileSecurityAnalyzer
 import com.benchy.X.locale.AutoText
 import com.benchy.X.locale.LocaleManagerHelper
 import com.benchy.X.locale.TranslationStatusBanner
 import com.benchy.X.ui.components.BenchyCard
 import com.benchy.X.ui.components.BenchyEmblem
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
@@ -108,6 +122,7 @@ fun OnboardingScreen(
     onSelectAccent: (AccentPreset) -> Unit,
     onSelectTempUnit: (TempUnit) -> Unit,
     onSelectStorageUnit: (StorageUnit) -> Unit,
+    onSetSkipSystemApps: (Boolean) -> Unit,
     onFinishOnboarding: () -> Unit
 ) {
     val pagerState = rememberPagerState(pageCount = { 6 })
@@ -146,11 +161,16 @@ fun OnboardingScreen(
                 repeat(6) { idx ->
                     val active = idx == pagerState.currentPage
                     val passed = idx < pagerState.currentPage
+                    val pillWidth by animateDpAsState(
+                        targetValue = if (active) 28.dp else 10.dp,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        label = "stepPillWidth"
+                    )
                     Box(
                         modifier = Modifier
                             .padding(horizontal = 4.dp)
                             .height(6.dp)
-                            .width(if (active) 28.dp else 10.dp)
+                            .width(pillWidth)
                             .clip(CircleShape)
                             .background(
                                 when {
@@ -216,10 +236,15 @@ fun OnboardingScreen(
                             modeSelectedInWizard = it
                             onSelectMode(it)
                         },
+                        onSkipSystemAppsChanged = {
+                            prefsChangedOnPage5 = true
+                            onSetSkipSystemApps(it)
+                        },
                         onNext = { scope.launch { pagerState.animateScrollToPage(5) } },
                         onSkip = { scope.launch { pagerState.animateScrollToPage(5) } }
                     )
                     5 -> OnboardingPage6Celebration(
+                        isVisible = pagerState.currentPage == 5,
                         onDone = onFinishOnboarding
                     )
                 }
@@ -586,6 +611,7 @@ private fun ModeChoiceCard(
 @Composable
 private fun OnboardingPage4Permissions(onNext: () -> Unit) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var notifGranted by remember {
         mutableStateOf(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -598,10 +624,30 @@ private fun OnboardingPage4Permissions(onNext: () -> Unit) {
             }
         )
     }
+    var filesGranted by remember {
+        mutableStateOf(FileSecurityAnalyzer.hasFileScanPermission(context))
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                filesGranted = FileSecurityAnalyzer.hasFileScanPermission(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val notifLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         notifGranted = granted
+    }
+
+    val legacyFilesLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        filesGranted = granted || FileSecurityAnalyzer.hasFileScanPermission(context)
     }
 
     Column(
@@ -622,7 +668,7 @@ private fun OnboardingPage4Permissions(onNext: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            BenchyCard {
+            BenchyCard(modifier = Modifier.animateContentSize()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -671,6 +717,70 @@ private fun OnboardingPage4Permissions(onNext: () -> Unit) {
                             }
                         },
                         modifier = Modifier.testTag("grant_notif_perm_btn")
+                    ) {
+                        AutoText(resId = R.string.onboarding_perm_needed)
+                    }
+                }
+            }
+
+            BenchyCard(modifier = Modifier.animateContentSize()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.FolderOpen,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        AutoText(
+                            resId = R.string.onboarding_perm_files_title,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        AutoText(
+                            resId = R.string.onboarding_perm_files_desc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                if (filesGranted) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Check,
+                            contentDescription = null,
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        AutoText(
+                            resId = R.string.onboarding_perm_granted,
+                            color = Color(0xFF2E7D32),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                runCatching { context.startActivity(intent) }.onFailure {
+                                    runCatching {
+                                        context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                                    }
+                                }
+                            } else {
+                                legacyFilesLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                            }
+                        },
+                        modifier = Modifier.testTag("grant_files_perm_btn")
                     ) {
                         AutoText(resId = R.string.onboarding_perm_needed)
                     }
@@ -732,6 +842,7 @@ private fun OnboardingPage5Preferences(
     onTempChanged: (TempUnit) -> Unit,
     onStorageChanged: (StorageUnit) -> Unit,
     onModeChanged: (AppMode) -> Unit,
+    onSkipSystemAppsChanged: (Boolean) -> Unit,
     onNext: () -> Unit,
     onSkip: () -> Unit
 ) {
@@ -847,6 +958,35 @@ private fun OnboardingPage5Preferences(
                         label = { AutoText(resId = R.string.mode_techy_title) }
                     )
                 }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        AutoText(
+                            resId = R.string.pref_skip_system_apps,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        AutoText(
+                            resId = R.string.pref_skip_system_apps_desc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = preferences.skipSystemApps,
+                        onCheckedChange = onSkipSystemAppsChanged,
+                        modifier = Modifier.testTag("onboarding_skip_system_switch")
+                    )
+                }
             }
         }
 
@@ -889,7 +1029,10 @@ private data class ConfettiParticle(
 )
 
 @Composable
-private fun OnboardingPage6Celebration(onDone: () -> Unit) {
+private fun OnboardingPage6Celebration(
+    isVisible: Boolean,
+    onDone: () -> Unit
+) {
     val palette = listOf(
         MaterialTheme.colorScheme.primary,
         Color(0xFF00E676),
@@ -899,11 +1042,11 @@ private fun OnboardingPage6Celebration(onDone: () -> Unit) {
     )
     val particles = remember {
         val rng = Random(2026)
-        List(55) {
+        List(58) {
             ConfettiParticle(
                 xFraction = rng.nextFloat(),
-                startYFraction = rng.nextFloat() * -0.5f,
-                speed = 0.25f + rng.nextFloat() * 0.45f,
+                startYFraction = rng.nextFloat() * -0.45f,
+                speed = 0.75f + rng.nextFloat() * 0.75f,
                 radiusDp = 3f + rng.nextFloat() * 4.5f,
                 drift = (rng.nextFloat() - 0.5f) * 0.12f,
                 color = palette[it % palette.size]
@@ -911,26 +1054,36 @@ private fun OnboardingPage6Celebration(onDone: () -> Unit) {
         }
     }
 
-    var progress by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            progress = (progress + 0.016f) % 1.4f
-            delay(16L)
+    var hasPlayedConfetti by rememberSaveable { mutableStateOf(false) }
+    val confettiAnim = remember { Animatable(0f) }
+
+    LaunchedEffect(isVisible) {
+        if (isVisible && !hasPlayedConfetti) {
+            hasPlayedConfetti = true
+            confettiAnim.snapTo(0f)
+            confettiAnim.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 3000, easing = LinearEasing)
+            )
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            particles.forEach { p ->
-                val yNorm = (p.startYFraction + progress * p.speed * 2.1f) % 1.15f
-                if (yNorm in 0f..1.1f) {
-                    val x = (p.xFraction + sin(progress * 6f + p.xFraction * 10f) * p.drift) * size.width
-                    val y = yNorm * size.height
-                    drawCircle(
-                        color = p.color.copy(alpha = 0.85f),
-                        radius = p.radiusDp.dp.toPx(),
-                        center = Offset(x, y)
-                    )
+        val pVal = confettiAnim.value
+        if (pVal > 0f && pVal < 1f) {
+            val fadeAlpha = if (pVal > 0.78f) ((1f - pVal) / 0.22f).coerceIn(0f, 1f) else 1f
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                particles.forEach { p ->
+                    val yNorm = p.startYFraction + pVal * p.speed * 1.45f
+                    if (yNorm in -0.05f..1.08f) {
+                        val x = (p.xFraction + sin(pVal * 7f + p.xFraction * 10f) * p.drift) * size.width
+                        val y = yNorm * size.height
+                        drawCircle(
+                            color = p.color.copy(alpha = 0.88f * fadeAlpha),
+                            radius = p.radiusDp.dp.toPx(),
+                            center = Offset(x, y)
+                        )
+                    }
                 }
             }
         }

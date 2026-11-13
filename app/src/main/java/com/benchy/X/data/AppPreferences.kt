@@ -65,6 +65,7 @@ data class UserPreferences(
     val alertsMuted: Boolean = false,
     val autoScanEnabled: Boolean = false,
     val autoScanIntervalHours: Int = 24,
+    val skipSystemApps: Boolean = false,
     val hasSeenTestMyPhoneIntro: Boolean = false,
     val batteryTrackerActive: Boolean = false,
     val batteryTrackerStartMillis: Long = 0L
@@ -84,6 +85,7 @@ class PreferencesRepository(private val context: Context) {
         val ALERTS_MUTED = booleanPreferencesKey("alerts_muted")
         val AUTO_SCAN_ENABLED = booleanPreferencesKey("auto_scan_enabled")
         val AUTO_SCAN_INTERVAL_HOURS = intPreferencesKey("auto_scan_interval_hours")
+        val SKIP_SYSTEM_APPS = booleanPreferencesKey("skip_system_apps")
         val SEEN_TEST_MY_PHONE_INTRO = booleanPreferencesKey("has_seen_test_my_phone_intro")
         val BATTERY_TRACKER_ACTIVE = booleanPreferencesKey("battery_tracker_active")
         val BATTERY_TRACKER_START = stringPreferencesKey("battery_tracker_start_millis")
@@ -102,6 +104,7 @@ class PreferencesRepository(private val context: Context) {
             alertsMuted = prefs[Keys.ALERTS_MUTED] ?: false,
             autoScanEnabled = prefs[Keys.AUTO_SCAN_ENABLED] ?: false,
             autoScanIntervalHours = prefs[Keys.AUTO_SCAN_INTERVAL_HOURS] ?: 24,
+            skipSystemApps = prefs[Keys.SKIP_SYSTEM_APPS] ?: false,
             hasSeenTestMyPhoneIntro = prefs[Keys.SEEN_TEST_MY_PHONE_INTRO] ?: false,
             batteryTrackerActive = prefs[Keys.BATTERY_TRACKER_ACTIVE] ?: false,
             batteryTrackerStartMillis = prefs[Keys.BATTERY_TRACKER_START]?.toLongOrNull() ?: 0L
@@ -151,6 +154,10 @@ class PreferencesRepository(private val context: Context) {
                 it[Keys.AUTO_SCAN_INTERVAL_HOURS] = intervalHours
             }
         }
+    }
+
+    suspend fun setSkipSystemApps(skip: Boolean) {
+        context.benchyDataStore.edit { it[Keys.SKIP_SYSTEM_APPS] = skip }
     }
 
     suspend fun markTestMyPhoneIntroSeen() {

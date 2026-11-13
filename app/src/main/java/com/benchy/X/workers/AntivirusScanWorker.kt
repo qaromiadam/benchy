@@ -28,27 +28,39 @@ class AntivirusScanWorker(
         val scanResult = PackageSecurityAnalyzer.scanInstalledAppsWithProgress(
             context = applicationContext,
             allowlistedPackages = allowlisted,
-            minDurationMs = 12_000L,
+            skipSystemApps = prefs.skipSystemApps,
+            minDurationMs = 10_000L,
             onProgress = { /* background sweep */ }
         )
-        val threats = scanResult.flaggedPackages.size
+        val fileResult = if (com.benchy.X.engine.FileSecurityAnalyzer.hasFileScanPermission(applicationContext)) {
+            com.benchy.X.engine.FileSecurityAnalyzer.scanDeviceFilesWithProgress(
+                context = applicationContext,
+                minDurationMs = 4_000L,
+                onProgress = {}
+            )
+        } else {
+            null
+        }
+        val pkgThreats = scanResult.flaggedPackages.size
+        val fileThreats = fileResult?.flaggedFiles?.size ?: 0
+        val totalThreats = pkgThreats + fileThreats
 
-        if (threats == 0) {
+        if (totalThreats == 0) {
+            val fileNote = if (fileResult != null) " and ${fileResult.totalFilesInspected} files" else ""
             NotificationHelper.postResultAlert(
                 context = applicationContext,
                 isPositive = true,
                 title = "Benchy Auto-Scan: All Clear",
-                body = "0 threats detected across ${scanResult.totalPackagesInspected} inspected apps.",
+                body = "0 threats detected across ${scanResult.totalPackagesInspected} inspected apps$fileNote.",
                 alertsMuted = prefs.alertsMuted,
                 notificationId = NotificationHelper.NOTIF_ID_ANTIVIRUS
             )
         } else {
-            val topApp = scanResult.flaggedPackages.first().appLabel
             NotificationHelper.postResultAlert(
                 context = applicationContext,
                 isPositive = false,
-                title = "Benchy Security Alert: $threats Risk(s)",
-                body = "Flagged $topApp and ${threats - 1} other package(s). Open Benchy Security to review or allowlist.",
+                title = "Benchy Security Alert: $totalThreats Risk(s)",
+                body = "$pkgThreats app risk(s) and $fileThreats file/zip-bomb risk(s) found. Open Benchy Security to review.",
                 alertsMuted = prefs.alertsMuted,
                 notificationId = NotificationHelper.NOTIF_ID_ANTIVIRUS
             )
@@ -60,7 +72,7 @@ class AntivirusScanWorker(
         private const val UNIQUE_WORK_NAME = "benchy_periodic_antivirus"
 
         fun schedule(context: Context, intervalHours: Int) {
-            val hours = intervalHours.coerceIn(1, 168).toLong()
+            val hours = intervalHours.coerceIn(1, 720).toLong()
             val request = PeriodicWorkRequestBuilder<AntivirusScanWorker>(hours, TimeUnit.HOURS)
                 .build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(

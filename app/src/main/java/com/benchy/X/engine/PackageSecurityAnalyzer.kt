@@ -70,10 +70,11 @@ object PackageSecurityAnalyzer {
 
     fun scanInstalledApps(
         context: Context,
-        allowlistedPackages: Set<String>
+        allowlistedPackages: Set<String>,
+        skipSystemApps: Boolean = false
     ): AntivirusScanResult {
         val pm = context.packageManager
-        val candidates = collectCandidatePackages(context, pm)
+        val candidates = collectCandidatePackages(context, pm, skipSystemApps)
         val flagged = mutableListOf<FlaggedPackage>()
         for (pkg in candidates) {
             if (pkg.packageName in allowlistedPackages) continue
@@ -92,17 +93,18 @@ object PackageSecurityAnalyzer {
     suspend fun scanInstalledAppsWithProgress(
         context: Context,
         allowlistedPackages: Set<String>,
+        skipSystemApps: Boolean = false,
         minDurationMs: Long = 10_000L,
         onProgress: suspend (PackageScanProgress) -> Unit
     ): AntivirusScanResult {
         val startMs = System.currentTimeMillis()
         val pm = context.packageManager
-        val candidates = collectCandidatePackages(context, pm)
+        val candidates = collectCandidatePackages(context, pm, skipSystemApps)
         val total = candidates.size.coerceAtLeast(1)
         val flagged = mutableListOf<FlaggedPackage>()
 
         // Pace per-package inspection so deep APK digest & cert audit takes genuine measurable time
-        val perPkgDelayMs = (minDurationMs / total).coerceIn(25L, 280L)
+        val perPkgDelayMs = (minDurationMs / total).coerceIn(20L, 260L)
 
         candidates.forEachIndexed { index, pkg ->
             val appInfo = pkg.applicationInfo
@@ -144,7 +146,11 @@ object PackageSecurityAnalyzer {
         )
     }
 
-    private fun collectCandidatePackages(context: Context, pm: PackageManager): List<PackageInfo> {
+    private fun collectCandidatePackages(
+        context: Context,
+        pm: PackageManager,
+        skipSystemApps: Boolean
+    ): List<PackageInfo> {
         val flags = PackageManager.GET_PERMISSIONS or PackageManager.GET_SIGNING_CERTIFICATES
         val allPackages: List<PackageInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             pm.getInstalledPackages(PackageManager.PackageInfoFlags.of(flags.toLong()))
@@ -156,9 +162,13 @@ object PackageSecurityAnalyzer {
         return allPackages.filter { pkg ->
             val appInfo = pkg.applicationInfo ?: return@filter false
             if (pkg.packageName == context.packageName) return@filter false
-            val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-            val isUpdatedSystem = (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-            !(isSystemApp && !isUpdatedSystem)
+            if (skipSystemApps) {
+                val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                val isUpdatedSystem = (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+                !(isSystemApp && !isUpdatedSystem)
+            } else {
+                true
+            }
         }
     }
 

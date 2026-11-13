@@ -1,9 +1,14 @@
 package com.benchy.X.ui.screens
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,13 +30,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -42,6 +52,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,9 +64,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.benchy.X.R
 import com.benchy.X.data.AllowlistedAppEntity
 import com.benchy.X.data.UserPreferences
+import com.benchy.X.engine.FileThreatCategory
+import com.benchy.X.engine.FlaggedFile
 import com.benchy.X.engine.FlaggedPackage
 import com.benchy.X.engine.RiskTier
 import com.benchy.X.locale.AutoText
@@ -68,6 +84,7 @@ import com.benchy.X.ui.theme.TierCriticalRed
 import com.benchy.X.ui.theme.TierDragOrange
 import com.benchy.X.ui.theme.TierGoodAmber
 import com.benchy.X.ui.theme.TierPeakGreen
+import java.util.Locale
 
 @Composable
 fun SecurityScreen(
@@ -75,18 +92,86 @@ fun SecurityScreen(
     antivirusState: AntivirusUiState,
     allowlistedApps: List<AllowlistedAppEntity>,
     isIgnoringBatteryOpt: () -> Boolean,
+    hasFilePermission: () -> Boolean,
     onRunScan: () -> Unit,
+    onScanSafFolder: (Uri) -> Unit,
+    onDeleteFlaggedFile: (FlaggedFile) -> Unit,
+    onDismissFlaggedFile: (String) -> Unit,
     onToggleAutoScan: (Boolean) -> Unit,
     onAllowlistPackage: (String, String) -> Unit,
     onRemoveAllowlist: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val metrics = LocalBenchyLayoutMetrics.current
     var showBatteryOptForAutoScan by remember { mutableStateOf(false) }
+    var showStoragePermDialog by remember { mutableStateOf(false) }
+    var pendingScanAfterPerm by remember { mutableStateOf(false) }
+    var filePermGranted by remember { mutableStateOf(hasFilePermission()) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val nowGranted = hasFilePermission()
+                filePermGranted = nowGranted
+                if (pendingScanAfterPerm && nowGranted) {
+                    pendingScanAfterPerm = false
+                    onRunScan()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val readStorageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        filePermGranted = granted || hasFilePermission()
+        if (pendingScanAfterPerm) {
+            pendingScanAfterPerm = false
+            onRunScan()
+        }
+    }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            onScanSafFolder(uri)
+        }
+    }
+
+    fun requestFileAccess(autoRunAfter: Boolean = false) {
+        pendingScanAfterPerm = autoRunAfter
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val appIntent = Intent(
+                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.fromParts("package", context.packageName, null)
+            )
+            val fallback = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+            runCatching { context.startActivity(appIntent) }
+                .onFailure { runCatching { context.startActivity(fallback) } }
+        } else {
+            readStorageLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
+    fun handleRunFullScanClick() {
+        if (hasFilePermission()) {
+            onRunScan()
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            requestFileAccess(autoRunAfter = true)
+        } else {
+            showStoragePermDialog = true
+        }
+    }
 
     val isScanning = antivirusState.isScanning
-    val scanProgress = antivirusState.progress
-    val scanResult = antivirusState.result
+    val pkgProgress = antivirusState.packageProgress
+    val fileProgress = antivirusState.fileProgress
+    val pkgResult = antivirusState.packageResult
+    val fileResult = antivirusState.fileResult
 
     if (showBatteryOptForAutoScan) {
         BatteryOptExemptionDialog(
@@ -99,6 +184,48 @@ fun SecurityScreen(
         )
     }
 
+    if (showStoragePermDialog) {
+        AlertDialog(
+            onDismissRequest = { showStoragePermDialog = false },
+            icon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            title = { AutoText(resId = R.string.security_crawler_perm_dialog_title) },
+            text = { AutoText(resId = R.string.security_crawler_perm_dialog_body) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showStoragePermDialog = false
+                        requestFileAccess(autoRunAfter = true)
+                    },
+                    modifier = Modifier.testTag("crawler_dialog_grant_btn")
+                ) {
+                    AutoText(resId = R.string.security_crawler_grant_all)
+                }
+            },
+            dismissButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(
+                        onClick = {
+                            showStoragePermDialog = false
+                            folderPickerLauncher.launch(null)
+                        },
+                        modifier = Modifier.testTag("crawler_dialog_saf_btn")
+                    ) {
+                        AutoText(resId = R.string.security_scan_folder)
+                    }
+                    TextButton(
+                        onClick = {
+                            showStoragePermDialog = false
+                            onRunScan()
+                        },
+                        modifier = Modifier.testTag("crawler_dialog_continue_btn")
+                    ) {
+                        AutoText(resId = R.string.security_crawler_scan_anyway)
+                    }
+                }
+            }
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier
@@ -107,8 +234,9 @@ fun SecurityScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(metrics.sectionSpacing)
         ) {
-            item {
-                BenchyCard {
+            // Header & Scan Triggers
+            item(key = "sec_header") {
+                BenchyCard(modifier = Modifier.animateContentSize()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -131,9 +259,21 @@ fun SecurityScreen(
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = if (preferences.skipSystemApps) {
+                            "Mode: User-installed apps + file-system crawler (payloads & zip bombs)"
+                        } else {
+                            "Mode: All installed apps + file-system crawler (payloads & zip bombs)"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
                     Button(
-                        onClick = onRunScan,
+                        onClick = { handleRunFullScanClick() },
                         enabled = !isScanning,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -155,45 +295,139 @@ fun SecurityScreen(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { folderPickerLauncher.launch(null) },
+                        enabled = !isScanning,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("antivirus_scan_folder_btn")
+                    ) {
+                        Icon(Icons.Outlined.FolderOpen, null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        AutoText(resId = R.string.security_scan_folder)
+                    }
+
                     AnimatedVisibility(visible = isScanning) {
                         Column(
                             modifier = Modifier.padding(top = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            val total = (scanProgress?.totalCount ?: 1).coerceAtLeast(1)
-                            val scanned = scanProgress?.scannedCount ?: 0
-                            val fraction = (scanned.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-                            if (scanProgress != null) {
-                                AutoText(
-                                    resId = R.string.security_inspecting_progress,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    formatArgs = arrayOf(
-                                        scanProgress.scannedCount,
-                                        scanProgress.totalCount,
-                                        scanProgress.currentAppLabel
+                            when {
+                                pkgProgress != null -> {
+                                    val total = pkgProgress.totalCount.coerceAtLeast(1)
+                                    val fraction = (pkgProgress.scannedCount.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                                    AutoText(
+                                        resId = R.string.security_inspecting_progress,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        formatArgs = arrayOf(
+                                            pkgProgress.scannedCount,
+                                            pkgProgress.totalCount,
+                                            pkgProgress.currentAppLabel
+                                        )
                                     )
+                                    LinearProgressIndicator(
+                                        progress = { fraction },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                    )
+                                    Text(
+                                        text = "${pkgProgress.currentPackageName} • Flagged: ${pkgProgress.flaggedSoFar}",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                fileProgress != null -> {
+                                    val total = fileProgress.totalFiles.coerceAtLeast(1)
+                                    val fraction = (fileProgress.scannedFiles.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                                    AutoText(
+                                        resId = R.string.security_inspecting_files_progress,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        formatArgs = arrayOf(
+                                            fileProgress.scannedFiles,
+                                            fileProgress.totalFiles,
+                                            fileProgress.currentFileName
+                                        )
+                                    )
+                                    LinearProgressIndicator(
+                                        progress = { fraction },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                    )
+                                    Text(
+                                        text = "Dirs crawled: ${fileProgress.directoriesTraversed} • Payload & Zip-Bomb check • Flagged: ${fileProgress.flaggedSoFar}",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                else -> {
+                                    LinearProgressIndicator(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Read Files Permission Card
+            item(key = "sec_file_perm") {
+                val borderColor = if (filePermGranted) {
+                    TierPeakGreen.copy(alpha = 0.5f)
+                } else {
+                    TierDragOrange.copy(alpha = 0.7f)
+                }
+                BenchyCard(borderColor = borderColor) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = if (filePermGranted) Icons.Outlined.CheckCircle else Icons.Outlined.FolderOpen,
+                                contentDescription = null,
+                                tint = if (filePermGranted) TierPeakGreen else TierDragOrange
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                AutoText(
+                                    resId = if (filePermGranted) {
+                                        R.string.security_file_perm_granted
+                                    } else {
+                                        R.string.security_file_perm_title
+                                    },
+                                    style = MaterialTheme.typography.titleMedium
                                 )
-                                LinearProgressIndicator(
-                                    progress = { fraction },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                )
-                                Text(
-                                    text = "${scanProgress.currentPackageName} • Flagged so far: ${scanProgress.flaggedSoFar}",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    style = MaterialTheme.typography.labelSmall,
+                                AutoText(
+                                    resId = R.string.security_file_perm_desc,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            } else {
-                                LinearProgressIndicator(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                )
+                            }
+                        }
+                        if (!filePermGranted) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = { requestFileAccess() },
+                                modifier = Modifier.testTag("grant_file_perm_btn")
+                            ) {
+                                AutoText(resId = R.string.action_grant_permission)
                             }
                         }
                     }
@@ -201,7 +435,7 @@ fun SecurityScreen(
             }
 
             // Automated Daily Antivirus Toggle
-            item {
+            item(key = "sec_auto_scan") {
                 BenchyCard {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -240,10 +474,15 @@ fun SecurityScreen(
                 }
             }
 
-            // Scan Summary Status
-            if (scanResult != null && !isScanning) {
-                item {
-                    val zeroThreats = scanResult.flaggedPackages.isEmpty()
+            // Scan Summary Status (Packages + Files)
+            if ((pkgResult != null || fileResult != null) && !isScanning) {
+                val flaggedPkgs = pkgResult?.flaggedPackages.orEmpty()
+                val flaggedFiles = fileResult?.flaggedFiles.orEmpty()
+                val totalApps = pkgResult?.totalPackagesInspected ?: 0
+                val totalFiles = fileResult?.totalFilesInspected ?: 0
+
+                item(key = "sec_summary_banner") {
+                    val zeroThreats = flaggedPkgs.isEmpty() && flaggedFiles.isEmpty()
                     val bannerColor = if (zeroThreats) TierPeakGreen else TierCriticalRed
                     Surface(
                         shape = RoundedCornerShape(16.dp),
@@ -261,30 +500,51 @@ fun SecurityScreen(
                                 contentDescription = null,
                                 tint = bannerColor
                             )
-                            if (zeroThreats) {
-                                AutoText(
-                                    resId = R.string.security_zero_threats,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = bannerColor,
-                                    formatArgs = arrayOf(scanResult.totalPackagesInspected)
-                                )
-                            } else {
-                                AutoText(
-                                    resId = R.string.security_threats_found,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = bannerColor,
-                                    formatArgs = arrayOf(
-                                        scanResult.flaggedPackages.size,
-                                        scanResult.totalPackagesInspected
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                if (zeroThreats) {
+                                    AutoText(
+                                        resId = R.string.security_zero_threats,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = bannerColor,
+                                        formatArgs = arrayOf(totalApps, totalFiles)
                                     )
-                                )
+                                } else {
+                                    AutoText(
+                                        resId = R.string.security_threats_found,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = bannerColor,
+                                        formatArgs = arrayOf(
+                                            flaggedPkgs.size,
+                                            flaggedFiles.size,
+                                            totalApps,
+                                            totalFiles
+                                        )
+                                    )
+                                }
+                                fileResult?.let { fr ->
+                                    Text(
+                                        text = "Crawler: ${fr.crawlScopeLabel}",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                // Risk-Tiered Cards with Allowlist and App Info Actions
-                items(scanResult.flaggedPackages, key = { it.packageName }) { pkg ->
+                // Flagged Files & Zip Bombs
+                items(flaggedFiles, key = { "file_${it.id}" }) { flaggedFile ->
+                    FlaggedFileCard(
+                        flaggedFile = flaggedFile,
+                        onDelete = { onDeleteFlaggedFile(flaggedFile) },
+                        onDismiss = { onDismissFlaggedFile(flaggedFile.id) }
+                    )
+                }
+
+                // Flagged App Packages
+                items(flaggedPkgs, key = { "pkg_${it.packageName}" }) { pkg ->
                     FlaggedPackageCard(
                         pkg = pkg,
                         onAllowlist = { onAllowlistPackage(pkg.packageName, pkg.appLabel) },
@@ -300,7 +560,7 @@ fun SecurityScreen(
 
             // Allowlisted Apps Section
             if (allowlistedApps.isNotEmpty()) {
-                item {
+                item(key = "sec_allowlist_header") {
                     AutoText(
                         resId = R.string.security_allowlisted_section,
                         style = MaterialTheme.typography.titleMedium,
@@ -308,7 +568,7 @@ fun SecurityScreen(
                         modifier = Modifier.padding(top = 6.dp)
                     )
                 }
-                items(allowlistedApps, key = { it.packageName }) { item ->
+                items(allowlistedApps, key = { "allow_${it.packageName}" }) { item ->
                     BenchyCard {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -346,6 +606,105 @@ fun SecurityScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FlaggedFileCard(
+    flaggedFile: FlaggedFile,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val tierColor = when (flaggedFile.riskTier) {
+        RiskTier.HIGH -> TierCriticalRed
+        RiskTier.MEDIUM -> TierDragOrange
+        RiskTier.LOW -> TierGoodAmber
+    }
+    val categoryLabel = when (flaggedFile.category) {
+        FileThreatCategory.ZIP_BOMB -> "ZIP BOMB"
+        FileThreatCategory.EICAR_TEST -> "EICAR TEST"
+        FileThreatCategory.SPOOFED_EXTENSION -> "SPOOFED EXT"
+        FileThreatCategory.SUSPICIOUS_APK_OR_SCRIPT -> "EXEC / APK"
+        FileThreatCategory.MALICIOUS_PAYLOAD -> "MALICIOUS"
+    }
+    val sizeText = when {
+        flaggedFile.sizeBytes >= 1024 * 1024 ->
+            String.format(Locale.US, "%.2f MB", flaggedFile.sizeBytes / (1024.0 * 1024.0))
+        flaggedFile.sizeBytes >= 1024 ->
+            String.format(Locale.US, "%.1f KB", flaggedFile.sizeBytes / 1024.0)
+        else -> "${flaggedFile.sizeBytes} B"
+    }
+
+    BenchyCard(borderColor = tierColor.copy(alpha = 0.7f)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = flaggedFile.fileName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "$sizeText • ${flaggedFile.filePath}",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = tierColor.copy(alpha = 0.16f)
+            ) {
+                Text(
+                    text = categoryLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = tierColor,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        flaggedFile.reasons.forEach { reason ->
+            AutoText(
+                text = "• $reason",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("dismiss_file_${flaggedFile.fileName}")
+            ) {
+                Icon(Icons.Outlined.VisibilityOff, null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                AutoText(resId = R.string.security_dismiss_file_btn)
+            }
+            Button(
+                onClick = onDelete,
+                colors = ButtonDefaults.buttonColors(containerColor = TierCriticalRed),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("delete_file_${flaggedFile.fileName}")
+            ) {
+                Icon(Icons.Outlined.DeleteOutline, null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                AutoText(resId = R.string.security_delete_file_btn)
             }
         }
     }

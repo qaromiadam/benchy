@@ -111,7 +111,9 @@ class LongScanService : Service() {
             var ram = NativeBridge.benchmarkRam(bufferMb = 24)
             var storage = NativeBridge.benchmarkStorage(cacheDir.absolutePath, fileSizeMb = 16, randomOps = 600)
             var allowlisted = repo.getAllowlistedPackages()
-            var security = PackageSecurityAnalyzer.scanInstalledApps(applicationContext, allowlisted)
+            var skipSystem = prefsRepo.preferences.first().skipSystemApps
+            var security = PackageSecurityAnalyzer.scanInstalledApps(applicationContext, allowlisted, skipSystem)
+            var fileThreats = 0
             var telemetry = TelemetryReader.readDeviceTelemetry(applicationContext)
 
             val gpuSamples = mutableListOf(58.0)
@@ -123,7 +125,7 @@ class LongScanService : Service() {
                 storage = storage,
                 gpu3dAvgFps = gpuSamples.average(),
                 telemetry = telemetry,
-                threatsDetected = security.flaggedPackages.size
+                threatsDetected = security.flaggedPackages.size + fileThreats
             ).overallScore
 
             // Concurrent 1-second wall-clock countdown ticker for real-second accuracy
@@ -137,7 +139,7 @@ class LongScanService : Service() {
                         pct < 20 -> "Sustained CPU & Thermal Baseline"
                         pct < 45 -> "Multi-Core & Memory Stability Loop"
                         pct < 70 -> "Storage I/O Endurance & 4K IOPS Check"
-                        pct < 90 -> "Deep Package & Malware Heuristic Audit"
+                        pct < 90 -> "Deep Package, File & Zip-Bomb Audit"
                         else -> "Final Thermal Throttling Verification"
                     }
 
@@ -153,7 +155,7 @@ class LongScanService : Service() {
                             interimCpuMulti = cpuMulti.score,
                             interimRamBw = ram.readBandwidthMbPerSec,
                             interimStorageRead = storage.seqReadMbPerSec,
-                            interimThreats = security.flaggedPackages.size,
+                            interimThreats = security.flaggedPackages.size + fileThreats,
                             currentTempCelsius = telemetry.battery.tempCelsius
                         )
                     )
@@ -184,12 +186,19 @@ class LongScanService : Service() {
                     3 -> {
                         storage = NativeBridge.benchmarkStorage(cacheDir.absolutePath, fileSizeMb = 16, randomOps = 500)
                         allowlisted = repo.getAllowlistedPackages()
+                        skipSystem = prefsRepo.preferences.first().skipSystemApps
                         security = PackageSecurityAnalyzer.scanInstalledAppsWithProgress(
                             context = applicationContext,
                             allowlistedPackages = allowlisted,
+                            skipSystemApps = skipSystem,
                             minDurationMs = 4_000L,
                             onProgress = {}
                         )
+                        if (com.benchy.X.engine.FileSecurityAnalyzer.hasFileScanPermission(applicationContext)) {
+                            fileThreats = com.benchy.X.engine.FileSecurityAnalyzer
+                                .scanDeviceFilesWithProgress(applicationContext, minDurationMs = 2_000L) {}
+                                .flaggedFiles.size
+                        }
                     }
                 }
                 telemetry = TelemetryReader.readDeviceTelemetry(applicationContext)
@@ -204,7 +213,7 @@ class LongScanService : Service() {
                     storage = storage,
                     gpu3dAvgFps = gpuSamples.average(),
                     telemetry = telemetry,
-                    threatsDetected = security.flaggedPackages.size
+                    threatsDetected = security.flaggedPackages.size + fileThreats
                 ).overallScore
 
                 cycle++

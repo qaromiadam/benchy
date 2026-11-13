@@ -53,9 +53,11 @@
 
     <!-- Onboarding Page 4: Basic Permissions -->
     <string name="onboarding_perms_title">Autorisations nécessaires</string>
-    <string name="onboarding_perms_subtitle">Uniquement les autorisations de base — aucune dérogation batterie en arrière-plan requise ici.</string>
+    <string name="onboarding_perms_subtitle">Autorisations requises pour les alertes sonores et l\'analyse antivirus des fichiers ou bombes ZIP.</string>
     <string name="onboarding_perm_notif_title">Notifications d\'analyse et d\'alerte</string>
     <string name="onboarding_perm_notif_desc">Permet à Benchy de jouer les alertes Ding-Ding ou Dong-Dong lorsque les tests ou analyses se terminent.</string>
+    <string name="onboarding_perm_files_title">Accès stockage et analyse de fichiers</string>
+    <string name="onboarding_perm_files_desc">Permet à l\'antivirus d\'inspecter Téléchargements, Documents, APK et archives ZIP/GZIP pour détecter malwares et bombes ZIP.</string>
     <string name="onboarding_perm_pkg_title">Vérifications matérielles et stockage</string>
     <string name="onboarding_perm_pkg_desc">Lit les fréquences CPU, la capacité RAM, la température batterie et les manifestes d\'applications.</string>
     <string name="onboarding_perm_granted">Accordée</string>
@@ -70,6 +72,8 @@
     <string name="pref_temp_unit">Unité de température</string>
     <string name="pref_storage_unit">Unité de stockage</string>
     <string name="pref_experience_mode">Mode d\'expérience</string>
+    <string name="pref_skip_system_apps">Ignorer les apps système (Antivirus)</string>
+    <string name="pref_skip_system_apps_desc">Désactivé par défaut : inspecte les applications système préinstallées en plus des apps utilisateur.</string>
 
     <!-- Onboarding Page 6: Done -->
     <string name="onboarding_done_title">C\'est prêt !</string>
@@ -114,33 +118,45 @@
 
     <!-- Device Health Check -->
     <string name="health_section_title">Santé de l\'appareil (1–10)</string>
+    <string name="health_empty_state">Aucun bilan santé pour l\'instant — lancez Tester mon téléphone pour évaluer la batterie, le stockage et la RAM.</string>
     <string name="health_battery_heat">Température batterie</string>
     <string name="health_storage">Stockage total et libre</string>
     <string name="health_ram">RAM disponible / libre / totale</string>
     <string name="health_rating_badge">%1$d / 10</string>
 
-    <!-- Antivirus & App Security -->
-    <string name="security_title">Antivirus et sécurité</string>
-    <string name="security_subtitle">Inspecte les paquets installés pour détecter les combinaisons de permissions dangereuses et les sources non officielles.</string>
-    <string name="security_scan_now">Analyser les applications</string>
-    <string name="security_auto_scan_title">Analyse antivirus quotidienne</string>
+    <!-- Antivirus & App + File Security -->
+    <string name="security_title">Antivirus et protection fichiers</string>
+    <string name="security_subtitle">Inspecte les applications, fichiers, APK et archives pour détecter malwares et bombes ZIP.</string>
+    <string name="security_scan_now">Analyse complète (Apps + Fichiers)</string>
+    <string name="security_scan_folder">Analyser un dossier</string>
+    <string name="security_file_perm_title">Permission de lecture fichiers requise</string>
+    <string name="security_file_perm_desc">Autorisez l\'accès au stockage pour inspecter Téléchargements, Documents et archives ZIP contre les bombes ZIP.</string>
+    <string name="security_file_perm_granted">Accès complet aux fichiers actif</string>
+    <string name="security_auto_scan_title">Analyse antivirus automatique</string>
     <string name="security_auto_scan_desc">Exécutée via WorkManager toutes les %1$d heures avec alerte immédiate.</string>
-    <string name="security_zero_threats">Tout est clair — 0 menace sur %1$d applications inspectées.</string>
-    <string name="security_threats_found">%1$d paquets signalés nécessitent votre attention (%2$d inspectés).</string>
+    <string name="security_zero_threats">Tout est clair — 0 menace sur %1$d apps et %2$d fichiers.</string>
+    <string name="security_threats_found">%1$d app(s) et %2$d fichier(s)/bombes ZIP signalés (%3$d apps, %4$d fichiers analysés).</string>
     <string name="security_risk_high">RISQUE ÉLEVÉ</string>
     <string name="security_risk_medium">RISQUE MOYEN</string>
     <string name="security_risk_low">RISQUE FAIBLE</string>
     <string name="security_allowlist_btn">Autoriser</string>
     <string name="security_app_info_btn">Infos app</string>
+    <string name="security_delete_file_btn">Supprimer</string>
+    <string name="security_dismiss_file_btn">Ignorer</string>
     <string name="security_allowlisted_section">Applications autorisées (%1$d)</string>
     <string name="security_remove_allowlist">Retirer</string>
     <string name="security_inspecting_progress">Inspection %1$d / %2$d paquets : %3$s</string>
+    <string name="security_inspecting_files_progress">Exploration fichier %1$d / %2$d : %3$s</string>
+    <string name="security_crawler_perm_dialog_title">Permission de stockage requise</string>
+    <string name="security_crawler_perm_dialog_body">Pour explorer Téléchargements, Documents, archives et le stockage à la recherche de charges malveillantes et bombes ZIP, accordez l\'accès aux fichiers ou choisissez un dossier.</string>
+    <string name="security_crawler_grant_all">Accès tous les fichiers</string>
+    <string name="security_crawler_scan_anyway">Analyser stockage interne</string>
 
     <!-- Techy Mode Suite -->
     <string name="techy_title">Suite de télémétrie Techy</string>
-    <string name="techy_subtitle">Routines C++17 NDK, shaders OpenGL ES 3.0, profilage thermique, capteurs en direct et suivi continu d\'énergie.</string>
+    <string name="techy_subtitle">Routines C++17 NDK, shaders OpenGL ES 3.0, sondes réseau/crypto, capteurs en direct et suivi énergie.</string>
     <string name="techy_cpu_title">Benchmark CPU (C++ JNI natif)</string>
-    <string name="techy_gpu_title">Benchmark GPU (Canvas 2D &amp; OpenGL ES 3D)</string>
+    <string name="techy_gpu_title">Benchmark GPU (Canvas 2D &amp; Cube OpenGL ES 3D)</string>
     <string name="techy_ram_title">Diagnostic RAM</string>
     <string name="techy_storage_title">Vitesse lecture/écriture stockage</string>
     <string name="techy_battery_title">Test batterie 1 semaine (Service persistant)</string>
@@ -148,8 +164,13 @@
     <string name="techy_thermal_zones_title">Zones thermiques et marge</string>
     <string name="techy_specs_title">SoC, noyau et écran</string>
     <string name="techy_sensors_title">Capteurs matériels en direct</string>
+    <string name="techy_network_title">Réseau, DNS et sonde Ping</string>
+    <string name="techy_process_title">Tas mémoire, charge et veille profonde</string>
+    <string name="techy_codecs_title">Audio et codecs matériels</string>
+    <string name="techy_crypto_title">Moteur crypto et posture sécurité</string>
     <string name="techy_export_csv">Exporter CSV</string>
     <string name="techy_export_json">Exporter JSON</string>
+    <string name="techy_export_txt">Enreg. TXT</string>
 
     <!-- Settings -->
     <string name="settings_title">Paramètres</string>
@@ -161,7 +182,12 @@
     <string name="settings_alerts_section">Sons d\'alerte et planification</string>
     <string name="settings_preview_good">Tester Ding-Ding</string>
     <string name="settings_preview_bad">Tester Dong-Dong</string>
+    <string name="settings_test_notif">Tester alerte positive</string>
+    <string name="settings_test_notif_bad">Tester alerte critique</string>
     <string name="settings_mute_alerts">Couper les sons d\'alerte</string>
     <string name="settings_autoscan_interval">Intervalle d\'analyse auto</string>
+    <string name="settings_autoscan_custom">Personnalisé…</string>
+    <string name="settings_autoscan_custom_title">Intervalle personnalisé</string>
+    <string name="settings_autoscan_custom_hint">Heures entre analyses (1–720)</string>
     <string name="settings_reopen_onboarding">Rouvrir l\'accueil de premier lancement</string>
 </resources>

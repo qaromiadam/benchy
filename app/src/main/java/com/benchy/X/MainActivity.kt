@@ -5,6 +5,9 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -117,6 +120,9 @@ private fun BenchyRootApp(viewModel: BenchyViewModel) {
     val liveSensors by viewModel.liveSensors.collectAsStateWithLifecycle()
     val batterySamples by viewModel.recentBatterySamples.collectAsStateWithLifecycle()
     val batteryAnalytics by viewModel.batteryAnalytics.collectAsStateWithLifecycle()
+    val networkDiag by viewModel.networkDiag.collectAsStateWithLifecycle()
+    val processStats by viewModel.processStats.collectAsStateWithLifecycle()
+    val audioCodecCaps by viewModel.audioCodecCaps.collectAsStateWithLifecycle()
 
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -258,6 +264,10 @@ private fun BenchyRootApp(viewModel: BenchyViewModel) {
                     NavHost(
                         navController = navController,
                         startDestination = if (preferences.isOnboardingComplete) DashboardRoute else OnboardingRoute,
+                        enterTransition = { fadeIn(animationSpec = tween(220)) },
+                        exitTransition = { fadeOut(animationSpec = tween(180)) },
+                        popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+                        popExitTransition = { fadeOut(animationSpec = tween(180)) },
                         modifier = Modifier.fillMaxSize()
                     ) {
                         composable<OnboardingRoute> {
@@ -269,6 +279,7 @@ private fun BenchyRootApp(viewModel: BenchyViewModel) {
                                 onSelectAccent = viewModel::setAccentPreset,
                                 onSelectTempUnit = viewModel::setTempUnit,
                                 onSelectStorageUnit = viewModel::setStorageUnit,
+                                onSetSkipSystemApps = viewModel::setSkipSystemApps,
                                 onFinishOnboarding = {
                                     viewModel.completeOnboarding()
                                     navController.navigate(DashboardRoute) {
@@ -301,7 +312,11 @@ private fun BenchyRootApp(viewModel: BenchyViewModel) {
                                 antivirusState = antivirusState,
                                 allowlistedApps = allowlistedApps,
                                 isIgnoringBatteryOpt = viewModel::isIgnoringBatteryOptimizations,
+                                hasFilePermission = viewModel::hasFileScanPermission,
                                 onRunScan = viewModel::runAntivirusScan,
+                                onScanSafFolder = viewModel::scanSafFolder,
+                                onDeleteFlaggedFile = viewModel::deleteFlaggedFile,
+                                onDismissFlaggedFile = viewModel::dismissFlaggedFile,
                                 onToggleAutoScan = { enabled -> viewModel.setAutoScan(enabled) },
                                 onAllowlistPackage = viewModel::allowlistApp,
                                 onRemoveAllowlist = viewModel::removeFromAllowlist
@@ -319,9 +334,14 @@ private fun BenchyRootApp(viewModel: BenchyViewModel) {
                                 throttleState = throttleState,
                                 batterySamples = batterySamples,
                                 batteryAnalytics = batteryAnalytics,
+                                networkDiag = networkDiag,
+                                processStats = processStats,
+                                audioCodecCaps = audioCodecCaps,
                                 onRunCpu = viewModel::runTechyCpuBenchmark,
                                 onRunRam = viewModel::runTechyRamBenchmark,
                                 onRunStorage = viewModel::runTechyStorageBenchmark,
+                                onRunNetworkPing = viewModel::runNetworkPing,
+                                onRunCryptoBench = viewModel::runCryptoBenchmark,
                                 onSetGpuRunning = viewModel::setGpuStressRunning,
                                 onUpdateGpuStats = viewModel::updateGpuStats,
                                 onToggleThrottleTest = viewModel::toggleThermalThrottleTest,
@@ -329,7 +349,8 @@ private fun BenchyRootApp(viewModel: BenchyViewModel) {
                                 onStartBatteryTracker = viewModel::startBatteryTracker,
                                 onStopBatteryTracker = viewModel::stopBatteryTracker,
                                 onGenerateCsv = viewModel::generateBatteryCsv,
-                                onGenerateJson = viewModel::generateBatteryJson
+                                onGenerateJson = viewModel::generateBatteryJson,
+                                onGenerateTxt = viewModel::generateBatteryTxt
                             )
                         }
 
@@ -346,7 +367,9 @@ private fun BenchyRootApp(viewModel: BenchyViewModel) {
                                 onSelectStorageUnit = viewModel::setStorageUnit,
                                 onSetAlertsMuted = viewModel::setAlertsMuted,
                                 onPreviewTone = viewModel::previewAlertSound,
+                                onTestNotification = viewModel::sendTestNotification,
                                 onSetAutoScan = viewModel::setAutoScan,
+                                onSetSkipSystemApps = viewModel::setSkipSystemApps,
                                 onReopenOnboarding = viewModel::reopenOnboarding
                             )
                         }

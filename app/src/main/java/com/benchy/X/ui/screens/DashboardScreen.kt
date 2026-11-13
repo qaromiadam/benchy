@@ -266,7 +266,7 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(metrics.sectionSpacing)
         ) {
             // Device identity pill header
-            item {
+            item(key = "dash_identity") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -303,7 +303,7 @@ fun DashboardScreen(
             }
 
             // Hero "Test My Phone" Card
-            item {
+            item(key = "dash_hero") {
                 val primary = MaterialTheme.colorScheme.primary
                 Surface(
                     shape = RoundedCornerShape(22.dp),
@@ -361,7 +361,7 @@ fun DashboardScreen(
             }
 
             // Active 30s Quick Scan Progress (1-second real-time countdown)
-            item {
+            item(key = "dash_quick_scan") {
                 AnimatedVisibility(visible = quickScan.isRunning) {
                     val elapsedSec = (30 - quickScan.remainingSeconds).coerceIn(0, 30)
                     BenchyCard(borderColor = MaterialTheme.colorScheme.primary) {
@@ -410,7 +410,7 @@ fun DashboardScreen(
             }
 
             // Active 2-Hour Long Scan Live Interim Progress
-            item {
+            item(key = "dash_long_scan") {
                 AnimatedVisibility(visible = longScan.isRunning) {
                     val remainingMs = (longScan.totalDurationMillis - longScan.elapsedMillis).coerceAtLeast(0L)
                     val remHours = remainingMs / 3_600_000L
@@ -503,7 +503,7 @@ fun DashboardScreen(
             }
 
             // Latest Benchmark Result + Color-Coded Score Ring + Sub-Ratings + Review
-            item {
+            item(key = "dash_latest_result") {
                 if (latestBenchmark == null) {
                     BenchyCard {
                         AutoText(
@@ -600,8 +600,8 @@ fun DashboardScreen(
                 }
             }
 
-            // Device Health Check (1-10 Ratings)
-            item {
+            // Device Health Check (1-10 Ratings) — empty on first launch until user runs a scan
+            item(key = "dash_health_title") {
                 AutoText(
                     resId = R.string.health_section_title,
                     style = MaterialTheme.typography.titleLarge,
@@ -609,28 +609,40 @@ fun DashboardScreen(
                 )
             }
 
-            item {
-                HealthRatingCard(
-                    title = stringResource(R.string.health_battery_heat),
-                    icon = Icons.Outlined.Thermostat,
-                    metric = healthReport.batteryHeat
-                )
-            }
+            if (latestBenchmark == null) {
+                item(key = "dash_health_empty") {
+                    BenchyCard {
+                        AutoText(
+                            resId = R.string.health_empty_state,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                item(key = "dash_health_battery") {
+                    HealthRatingCard(
+                        title = stringResource(R.string.health_battery_heat),
+                        icon = Icons.Outlined.Thermostat,
+                        metric = healthReport.batteryHeat
+                    )
+                }
 
-            item {
-                HealthRatingCard(
-                    title = stringResource(R.string.health_storage),
-                    icon = Icons.Outlined.SdStorage,
-                    metric = healthReport.storageHealth
-                )
-            }
+                item(key = "dash_health_storage") {
+                    HealthRatingCard(
+                        title = stringResource(R.string.health_storage),
+                        icon = Icons.Outlined.SdStorage,
+                        metric = healthReport.storageHealth
+                    )
+                }
 
-            item {
-                HealthRatingCard(
-                    title = stringResource(R.string.health_ram),
-                    icon = Icons.Outlined.Memory,
-                    metric = healthReport.ramHealth
-                )
+                item(key = "dash_health_ram") {
+                    HealthRatingCard(
+                        title = stringResource(R.string.health_ram),
+                        icon = Icons.Outlined.Memory,
+                        metric = healthReport.ramHealth
+                    )
+                }
             }
         }
     }

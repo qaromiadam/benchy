@@ -53,9 +53,11 @@
 
     <!-- Onboarding Page 4: Basic Permissions -->
     <string name="onboarding_perms_title">Necessary Permissions</string>
-    <string name="onboarding_perms_subtitle">Basic scanning permissions only—no aggressive background waivers required.</string>
+    <string name="onboarding_perms_subtitle">Required permissions for result sound alerts and scanning files or zip bombs.</string>
     <string name="onboarding_perm_notif_title">Scan &amp; Alert Notifications</string>
     <string name="onboarding_perm_notif_desc">Lets Benchy play Ding-Ding or Dong-Dong alerts when benchmarks or security scans finish.</string>
+    <string name="onboarding_perm_files_title">Storage &amp; File Antivirus Access</string>
+    <string name="onboarding_perm_files_desc">Lets Antivirus inspect Downloads, Documents, APKs, and ZIP/GZIP archives for malicious payloads and zip bombs.</string>
     <string name="onboarding_perm_pkg_title">Standard Hardware &amp; Storage Checks</string>
     <string name="onboarding_perm_pkg_desc">Reads live CPU frequencies, memory capacity, battery temperature, and installed package manifests.</string>
     <string name="onboarding_perm_granted">Granted</string>
@@ -70,6 +72,8 @@
     <string name="pref_temp_unit">Temperature Unit</string>
     <string name="pref_storage_unit">Storage Unit</string>
     <string name="pref_experience_mode">Experience Mode</string>
+    <string name="pref_skip_system_apps">Skip System Apps (Antivirus)</string>
+    <string name="pref_skip_system_apps_desc">When off (default), antivirus inspects all pre-installed system apps as well as user apps.</string>
 
     <!-- Onboarding Page 6: Done -->
     <string name="onboarding_done_title">You\'re Done!</string>
@@ -114,33 +118,45 @@
 
     <!-- Device Health Check -->
     <string name="health_section_title">Device Health Check (1–10)</string>
+    <string name="health_empty_state">No device health check yet — run Test My Phone to inspect battery heat, storage, and RAM ratings.</string>
     <string name="health_battery_heat">Battery Heat</string>
     <string name="health_storage">Storage Size &amp; Free Space</string>
     <string name="health_ram">Available / Free / Total RAM</string>
     <string name="health_rating_badge">%1$d / 10</string>
 
-    <!-- Antivirus & App Security -->
-    <string name="security_title">Antivirus &amp; App Security</string>
-    <string name="security_subtitle">Inspects installed packages for dangerous permission combos, unofficial installers, and debuggable/unsafe payloads.</string>
-    <string name="security_scan_now">Scan Installed Apps</string>
-    <string name="security_auto_scan_title">Automated Daily Antivirus Scan</string>
+    <!-- Antivirus & App + File Security -->
+    <string name="security_title">Antivirus &amp; Malware Guard</string>
+    <string name="security_subtitle">Inspects installed packages, files, APKs, and archives for malicious payloads and zip bombs.</string>
+    <string name="security_scan_now">Full Scan (Apps + Files)</string>
+    <string name="security_scan_folder">Scan Specific Folder</string>
+    <string name="security_file_perm_title">Read Files Permission Needed</string>
+    <string name="security_file_perm_desc">Allow file storage access so Benchy can inspect Downloads, Documents, and ZIP archives for malware and zip bombs.</string>
+    <string name="security_file_perm_granted">Full Storage File Access Active</string>
+    <string name="security_auto_scan_title">Automated Antivirus Scan</string>
     <string name="security_auto_scan_desc">Runs via WorkManager every %1$d hours and notifies you immediately if risks appear.</string>
-    <string name="security_zero_threats">All Clear — 0 threats across %1$d inspected apps.</string>
-    <string name="security_threats_found">%1$d flagged packages require your review (%2$d inspected).</string>
+    <string name="security_zero_threats">All Clear — 0 threats across %1$d apps and %2$d files.</string>
+    <string name="security_threats_found">%1$d app(s) and %2$d file(s)/zip-bombs flagged (%3$d apps, %4$d files scanned).</string>
     <string name="security_risk_high">HIGH RISK</string>
     <string name="security_risk_medium">MEDIUM RISK</string>
     <string name="security_risk_low">LOW RISK</string>
     <string name="security_allowlist_btn">Allowlist</string>
     <string name="security_app_info_btn">App Info</string>
+    <string name="security_delete_file_btn">Delete File</string>
+    <string name="security_dismiss_file_btn">Ignore</string>
     <string name="security_allowlisted_section">Allowlisted Apps (%1$d)</string>
     <string name="security_remove_allowlist">Remove</string>
     <string name="security_inspecting_progress">Inspecting %1$d / %2$d packages: %3$s</string>
+    <string name="security_inspecting_files_progress">Crawling file %1$d / %2$d: %3$s</string>
+    <string name="security_crawler_perm_dialog_title">Storage Permission for File Crawler</string>
+    <string name="security_crawler_perm_dialog_body">To crawl Downloads, Documents, archives, and device storage for malicious payloads and zip bombs, grant All Files Access or choose a folder to scan.</string>
+    <string name="security_crawler_grant_all">Grant All Files Access</string>
+    <string name="security_crawler_scan_anyway">Scan App Storage Only</string>
 
     <!-- Techy Mode Suite -->
     <string name="techy_title">Techy Telemetry Suite</string>
-    <string name="techy_subtitle">Portable C++17 NDK routines, OpenGL ES 3.0 shaders, thermal profiling, live sensors, and continuous power logging.</string>
+    <string name="techy_subtitle">Portable C++17 NDK routines, OpenGL ES 3.0 shaders, network/crypto probes, live sensors, and continuous power logging.</string>
     <string name="techy_cpu_title">CPU Benchmark (Native C++ JNI)</string>
-    <string name="techy_gpu_title">GPU Benchmark (2D Canvas &amp; 3D OpenGL ES)</string>
+    <string name="techy_gpu_title">GPU Benchmark (2D Canvas &amp; 3D OpenGL ES Cube)</string>
     <string name="techy_ram_title">RAM Diagnostic Check</string>
     <string name="techy_storage_title">Storage Read &amp; Write Speed</string>
     <string name="techy_battery_title">1-Week Battery Health &amp; Drain Test</string>
@@ -148,8 +164,13 @@
     <string name="techy_thermal_zones_title">Thermal Zones &amp; Headroom</string>
     <string name="techy_specs_title">SoC, Kernel &amp; Display Specs</string>
     <string name="techy_sensors_title">Sensor Array &amp; Live Telemetry</string>
+    <string name="techy_network_title">Network Link &amp; Ping Probe</string>
+    <string name="techy_process_title">Process Heap, Load &amp; Deep Sleep</string>
+    <string name="techy_codecs_title">Audio Pipeline &amp; Hardware Codecs</string>
+    <string name="techy_crypto_title">Crypto Engine &amp; Security Posture</string>
     <string name="techy_export_csv">Export CSV</string>
     <string name="techy_export_json">Export JSON</string>
+    <string name="techy_export_txt">Save TXT</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
@@ -161,7 +182,12 @@
     <string name="settings_alerts_section">Alert Sounds &amp; Antivirus Schedule</string>
     <string name="settings_preview_good">Preview Ding-Ding</string>
     <string name="settings_preview_bad">Preview Dong-Dong</string>
+    <string name="settings_test_notif">Test Good Alert</string>
+    <string name="settings_test_notif_bad">Test Warning Alert</string>
     <string name="settings_mute_alerts">Mute Custom Alert Sounds</string>
     <string name="settings_autoscan_interval">Auto-Scan Interval</string>
+    <string name="settings_autoscan_custom">Custom…</string>
+    <string name="settings_autoscan_custom_title">Custom Auto-Scan Interval</string>
+    <string name="settings_autoscan_custom_hint">Hours between scans (1–720)</string>
     <string name="settings_reopen_onboarding">Re-open First-Launch Onboarding</string>
 </resources>
