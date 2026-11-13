@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Benchy</string>
+
+    <!-- Navigation & Common -->
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_security">Security</string>
+    <string name="nav_techy_suite">Techy Suite</string>
+    <string name="nav_settings">Settings</string>
+    <string name="action_next">Next</string>
+    <string name="action_skip">Skip</string>
+    <string name="action_done">Done</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_got_it">Got It</string>
+    <string name="action_grant_permission">Grant Permission</string>
+    <string name="action_open_settings">Open System Settings</string>
+    <string name="action_start">Start</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_run">Run Test</string>
+    <string name="action_running">Running…</string>
+
+    <!-- Translation Banner -->
+    <string name="translation_downloading_banner">Downloading offline %1$s language pack (~30 MB)… Displaying English until ready.</string>
+    <string name="translation_ready_status">Offline %1$s translation active</string>
+    <string name="translation_error_status">Offline model unavailable — displaying English fallback</string>
+
+    <!-- Onboarding Page 1: Language -->
+    <string name="onboarding_lang_title">Choose Your Language</string>
+    <string name="onboarding_lang_subtitle">Select how Benchy displays diagnostics across your device.</string>
+    <string name="onboarding_lang_follow_system">Follow System</string>
+    <string name="onboarding_lang_detected">Detected system language: %1$s</string>
+    <string name="onboarding_lang_english">English</string>
+    <string name="onboarding_lang_english_sub">Native built-in English interface</string>
+    <string name="onboarding_lang_french">French (Français)</string>
+    <string name="onboarding_lang_french_sub">Native built-in French interface</string>
+    <string name="onboarding_lang_helper">Don\'t worry about making the perfect choice right now—your language can be easily changed later anytime in Settings.</string>
+
+    <!-- Onboarding Page 2: Welcome -->
+    <string name="onboarding_welcome_title">Welcome to Benchy</string>
+    <string name="onboarding_welcome_body">Benchy keeps your phone fast, healthy, and secure with zero ads, zero tracking, and real native C++ diagnostics.</string>
+    <string name="onboarding_welcome_pill_speed">Native Speed</string>
+    <string name="onboarding_welcome_pill_health">Device Health</string>
+    <string name="onboarding_welcome_pill_security">App Security</string>
+
+    <!-- Onboarding Page 3: Mode Selection -->
+    <string name="onboarding_mode_title">Select Your Mode</string>
+    <string name="onboarding_mode_subtitle">Choose the depth of diagnostics you want to see first.</string>
+    <string name="mode_user_friendly_title">User-Friendly Mode</string>
+    <string name="mode_user_friendly_desc">Plain-English scores, 1–10 health ratings, and one-tap tests.</string>
+    <string name="mode_techy_title">Techy Mode</string>
+    <string name="mode_techy_desc">Raw C++ telemetry, clock speeds, 4K IOPS, and stress graphs.</string>
+    <string name="onboarding_mode_helper">Don\'t worry about making the perfect choice right now—your mode can be changed later in Settings.</string>
+
+    <!-- Onboarding Page 4: Basic Permissions -->
+    <string name="onboarding_perms_title">Necessary Permissions</string>
+    <string name="onboarding_perms_subtitle">Basic scanning permissions only—no aggressive background waivers required.</string>
+    <string name="onboarding_perm_notif_title">Scan &amp; Alert Notifications</string>
+    <string name="onboarding_perm_notif_desc">Lets Benchy play Ding-Ding or Dong-Dong alerts when benchmarks or security scans finish.</string>
+    <string name="onboarding_perm_pkg_title">Standard Hardware &amp; Storage Checks</string>
+    <string name="onboarding_perm_pkg_desc">Reads live CPU frequencies, memory capacity, battery temperature, and installed package manifests.</string>
+    <string name="onboarding_perm_granted">Granted</string>
+    <string name="onboarding_perm_needed">Tap to Allow</string>
+    <string name="onboarding_perm_auto_active">Active Automatically</string>
+
+    <!-- Onboarding Page 5: Preferences -->
+    <string name="onboarding_prefs_title">Set Your Preferences</string>
+    <string name="onboarding_prefs_subtitle">Customize at least one setting to continue, or skip to use Precision Graphite defaults.</string>
+    <string name="pref_theme_mode">Theme Mode</string>
+    <string name="pref_accent_color">Accent Color</string>
+    <string name="pref_temp_unit">Temperature Unit</string>
+    <string name="pref_storage_unit">Storage Unit</string>
+    <string name="pref_experience_mode">Experience Mode</string>
+
+    <!-- Onboarding Page 6: Done -->
+    <string name="onboarding_done_title">You\'re Done!</string>
+    <string name="onboarding_done_body">Benchy is calibrated and ready to benchmark your hardware, monitor device health, and guard your apps.</string>
+
+    <!-- Dashboard & Test My Phone -->
+    <string name="dashboard_hero_title">Test My Phone</string>
+    <string name="dashboard_hero_subtitle">Full hardware speed, thermal stability, and gaming readiness check.</string>
+    <string name="dashboard_run_test_cta">Start Phone Test</string>
+    <string name="dashboard_last_score_label">Latest Overall Score</string>
+    <string name="dashboard_no_runs_yet">No scan run yet — tap Test My Phone to establish your device baseline.</string>
+    <string name="test_my_phone_intro_title">About Test My Phone</string>
+    <string name="test_my_phone_intro_message">This is test my phone, tests your phone based on CPU, GPU, STORAGE, and app scan for viruses, you can do a quick 30 second scan, but won\'t have app scanning, or 2 hour scan, offers everything in quick scan and app scan for malicious activity, 2 hour scan is recommended because its more accurate</string>
+
+    <!-- Scan Mode Selector -->
+    <string name="scan_mode_sheet_title">Choose Scan Mode</string>
+    <string name="scan_quick_title">Quick Scan (30 Seconds)</string>
+    <string name="scan_quick_desc">Rapid CPU, GPU, RAM, Storage, and Thermal check. Does NOT include an app virus scan, because performing package inspections in 30 seconds would be very inaccurate and rush the system.</string>
+    <string name="scan_long_title">Long Scan (2 Hours — Recommended)</string>
+    <string name="scan_long_desc">Everything in Quick Scan plus deep sustained thermal profiling and full app scan for malicious activity, dangerous permissions, and unsafe code via a persistent foreground service.</string>
+    <string name="battery_opt_title">Prevent Background Interruption</string>
+    <string name="battery_opt_long_scan_body">To stop aggressive OEM battery savers from killing the 2-hour scan mid-run, Benchy asks for background battery optimization exemption.</string>
+    <string name="battery_opt_autoscan_body">To keep daily automated antivirus scans reliable while your phone sleeps, Benchy recommends allowing background battery optimization exemption.</string>
+    <string name="battery_opt_allow">Allow Exemption</string>
+    <string name="battery_opt_continue_anyway">Continue Anyway</string>
+
+    <!-- Live Scan Progress -->
+    <string name="scan_in_progress_title">Scan in Progress</string>
+    <string name="scan_long_progress_title">2-Hour Deep Scan Active</string>
+    <string name="scan_remaining_label">Remaining: %1$s</string>
+    <string name="scan_interim_score_label">Interim Score: %1$d%%</string>
+
+    <!-- Sub-Ratings & Reviews -->
+    <string name="subrating_2d_gaming">2D Gaming</string>
+    <string name="subrating_3d_gaming">3D Gaming</string>
+    <string name="subrating_battery_temp">Battery Temp</string>
+    <string name="subrating_multitasking">Multitasking</string>
+    <string name="review_tier_critical">Critical Performance Warning: Severe thermal throttling or hardware bottleneck detected. Apps may lag and the battery is running hot. Let your phone cool down and close background apps.</string>
+    <string name="review_tier_drag">Moderate Performance Drag: Your phone is starting to slow under load. Consider freeing up storage space or clearing active background tasks to regain speed.</string>
+    <string name="review_tier_good">Good &amp; Stable: Your phone is running smoothly for daily tasks, casual 2D games, and multitasking. Thermal levels are normal.</string>
+    <string name="review_tier_peak">Peak Performance: Excellent condition! Your hardware is operating at top speed with great thermal efficiency. Perfect for heavy 3D gaming and multitasking.</string>
+
+    <!-- Device Health Check -->
+    <string name="health_section_title">Device Health Check (1–10)</string>
+    <string name="health_battery_heat">Battery Heat</string>
+    <string name="health_storage">Storage Size &amp; Free Space</string>
+    <string name="health_ram">Available / Free / Total RAM</string>
+    <string name="health_rating_badge">%1$d / 10</string>
+
+    <!-- Antivirus & App Security -->
+    <string name="security_title">Antivirus &amp; App Security</string>
+    <string name="security_subtitle">Inspects installed packages for dangerous permission combos, unofficial installers, and debuggable/unsafe payloads.</string>
+    <string name="security_scan_now">Scan Installed Apps</string>
+    <string name="security_auto_scan_title">Automated Daily Antivirus Scan</string>
+    <string name="security_auto_scan_desc">Runs via WorkManager every %1$d hours and notifies you immediately if risks appear.</string>
+    <string name="security_zero_threats">All Clear — 0 threats across %1$d inspected apps.</string>
+    <string name="security_threats_found">%1$d flagged packages require your review (%2$d inspected).</string>
+    <string name="security_risk_high">HIGH RISK</string>
+    <string name="security_risk_medium">MEDIUM RISK</string>
+    <string name="security_risk_low">LOW RISK</string>
+    <string name="security_allowlist_btn">Allowlist</string>
+    <string name="security_app_info_btn">App Info</string>
+    <string name="security_allowlisted_section">Allowlisted Apps (%1$d)</string>
+    <string name="security_remove_allowlist">Remove</string>
+    <string name="security_inspecting_progress">Inspecting %1$d / %2$d packages: %3$s</string>
+
+    <!-- Techy Mode Suite -->
+    <string name="techy_title">Techy Telemetry Suite</string>
+    <string name="techy_subtitle">Portable C++17 NDK routines, OpenGL ES 3.0 shaders, thermal profiling, live sensors, and continuous power logging.</string>
+    <string name="techy_cpu_title">CPU Benchmark (Native C++ JNI)</string>
+    <string name="techy_gpu_title">GPU Benchmark (2D Canvas &amp; 3D OpenGL ES)</string>
+    <string name="techy_ram_title">RAM Diagnostic Check</string>
+    <string name="techy_storage_title">Storage Read &amp; Write Speed</string>
+    <string name="techy_battery_title">1-Week Battery Health &amp; Drain Test</string>
+    <string name="techy_throttle_title">Thermal Throttling Stress Loop</string>
+    <string name="techy_thermal_zones_title">Thermal Zones &amp; Headroom</string>
+    <string name="techy_specs_title">SoC, Kernel &amp; Display Specs</string>
+    <string name="techy_sensors_title">Sensor Array &amp; Live Telemetry</string>
+    <string name="techy_export_csv">Export CSV</string>
+    <string name="techy_export_json">Export JSON</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_language_section">Language &amp; Translation</string>
+    <string name="settings_mode_section">Diagnostic Mode</string>
+    <string name="settings_appearance_section">Theme &amp; Appearance</string>
+    <string name="settings_card_density">Card Density</string>
+    <string name="settings_units_section">Measurement Units</string>
+    <string name="settings_alerts_section">Alert Sounds &amp; Antivirus Schedule</string>
+    <string name="settings_preview_good">Preview Ding-Ding</string>
+    <string name="settings_preview_bad">Preview Dong-Dong</string>
+    <string name="settings_mute_alerts">Mute Custom Alert Sounds</string>
+    <string name="settings_autoscan_interval">Auto-Scan Interval</string>
+    <string name="settings_reopen_onboarding">Re-open First-Launch Onboarding</string>
+</resources>

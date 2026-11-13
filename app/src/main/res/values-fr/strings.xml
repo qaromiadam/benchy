@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Benchy</string>
+
+    <!-- Navigation & Common -->
+    <string name="nav_dashboard">Tableau</string>
+    <string name="nav_security">Sécurité</string>
+    <string name="nav_techy_suite">Suite Tech</string>
+    <string name="nav_settings">Paramètres</string>
+    <string name="action_next">Suivant</string>
+    <string name="action_skip">Ignorer</string>
+    <string name="action_done">Terminé</string>
+    <string name="action_cancel">Annuler</string>
+    <string name="action_got_it">Compris</string>
+    <string name="action_grant_permission">Autoriser</string>
+    <string name="action_open_settings">Paramètres système</string>
+    <string name="action_start">Démarrer</string>
+    <string name="action_stop">Arrêter</string>
+    <string name="action_run">Lancer le test</string>
+    <string name="action_running">En cours…</string>
+
+    <!-- Translation Banner -->
+    <string name="translation_downloading_banner">Téléchargement du pack hors ligne %1$s (~30 Mo)… Affichage en anglais en attendant.</string>
+    <string name="translation_ready_status">Traduction hors ligne %1$s active</string>
+    <string name="translation_error_status">Modèle hors ligne indisponible — affichage en anglais</string>
+
+    <!-- Onboarding Page 1: Language -->
+    <string name="onboarding_lang_title">Choisissez votre langue</string>
+    <string name="onboarding_lang_subtitle">Sélectionnez la langue d\'affichage des diagnostics Benchy.</string>
+    <string name="onboarding_lang_follow_system">Suivre le système</string>
+    <string name="onboarding_lang_detected">Langue système détectée : %1$s</string>
+    <string name="onboarding_lang_english">Anglais (English)</string>
+    <string name="onboarding_lang_english_sub">Interface anglaise native intégrée</string>
+    <string name="onboarding_lang_french">Français</string>
+    <string name="onboarding_lang_french_sub">Interface française native intégrée</string>
+    <string name="onboarding_lang_helper">Ne vous inquiétez pas de faire le choix parfait maintenant — votre langue peut être modifiée facilement à tout moment dans les Paramètres.</string>
+
+    <!-- Onboarding Page 2: Welcome -->
+    <string name="onboarding_welcome_title">Bienvenue sur Benchy</string>
+    <string name="onboarding_welcome_body">Benchy garde votre téléphone rapide, sain et sécurisé sans aucune publicité, sans suivi, et avec de vrais diagnostics natifs C++.</string>
+    <string name="onboarding_welcome_pill_speed">Vitesse native</string>
+    <string name="onboarding_welcome_pill_health">Santé appareil</string>
+    <string name="onboarding_welcome_pill_security">Sécurité apps</string>
+
+    <!-- Onboarding Page 3: Mode Selection -->
+    <string name="onboarding_mode_title">Sélectionnez votre mode</string>
+    <string name="onboarding_mode_subtitle">Choisissez le niveau de détail des diagnostics à afficher.</string>
+    <string name="mode_user_friendly_title">Mode Simplifié</string>
+    <string name="mode_user_friendly_desc">Scores clairs, notes de santé de 1 à 10 et tests en un geste.</string>
+    <string name="mode_techy_title">Mode Techy</string>
+    <string name="mode_techy_desc">Télémétrie C++ brute, fréquences CPU, IOPS 4K et graphiques de stress.</string>
+    <string name="onboarding_mode_helper">Ne vous inquiétez pas de faire le choix parfait maintenant — votre mode peut être modifié plus tard dans les Paramètres.</string>
+
+    <!-- Onboarding Page 4: Basic Permissions -->
+    <string name="onboarding_perms_title">Autorisations nécessaires</string>
+    <string name="onboarding_perms_subtitle">Uniquement les autorisations de base — aucune dérogation batterie en arrière-plan requise ici.</string>
+    <string name="onboarding_perm_notif_title">Notifications d\'analyse et d\'alerte</string>
+    <string name="onboarding_perm_notif_desc">Permet à Benchy de jouer les alertes Ding-Ding ou Dong-Dong lorsque les tests ou analyses se terminent.</string>
+    <string name="onboarding_perm_pkg_title">Vérifications matérielles et stockage</string>
+    <string name="onboarding_perm_pkg_desc">Lit les fréquences CPU, la capacité RAM, la température batterie et les manifestes d\'applications.</string>
+    <string name="onboarding_perm_granted">Accordée</string>
+    <string name="onboarding_perm_needed">Appuyer pour autoriser</string>
+    <string name="onboarding_perm_auto_active">Actif automatiquement</string>
+
+    <!-- Onboarding Page 5: Preferences -->
+    <string name="onboarding_prefs_title">Définissez vos préférences</string>
+    <string name="onboarding_prefs_subtitle">Modifiez au moins un réglage pour continuer, ou ignorez pour garder les valeurs par défaut.</string>
+    <string name="pref_theme_mode">Thème</string>
+    <string name="pref_accent_color">Couleur d\'accentuation</string>
+    <string name="pref_temp_unit">Unité de température</string>
+    <string name="pref_storage_unit">Unité de stockage</string>
+    <string name="pref_experience_mode">Mode d\'expérience</string>
+
+    <!-- Onboarding Page 6: Done -->
+    <string name="onboarding_done_title">C\'est prêt !</string>
+    <string name="onboarding_done_body">Benchy est calibré et prêt à tester votre matériel, surveiller la santé de l\'appareil et protéger vos applications.</string>
+
+    <!-- Dashboard & Test My Phone -->
+    <string name="dashboard_hero_title">Tester mon téléphone</string>
+    <string name="dashboard_hero_subtitle">Analyse complète de la vitesse matérielle, de la stabilité thermique et des jeux.</string>
+    <string name="dashboard_run_test_cta">Lancer le test</string>
+    <string name="dashboard_last_score_label">Dernier score global</string>
+    <string name="dashboard_no_runs_yet">Aucun test effectué — appuyez sur Tester mon téléphone pour établir votre référence.</string>
+    <string name="test_my_phone_intro_title">À propos de Tester mon téléphone</string>
+    <string name="test_my_phone_intro_message">Ceci est Tester mon téléphone, il évalue votre téléphone selon le CPU, le GPU, le STOCKAGE et l\'analyse antivirus des applications. Vous pouvez faire une analyse rapide de 30 secondes (sans analyse antivirus), ou une analyse de 2 heures offrant tout le test rapide plus la détection d\'activités malveillantes. L\'analyse de 2 heures est recommandée car elle est plus précise.</string>
+
+    <!-- Scan Mode Selector -->
+    <string name="scan_mode_sheet_title">Choisir le mode d\'analyse</string>
+    <string name="scan_quick_title">Analyse rapide (30 secondes)</string>
+    <string name="scan_quick_desc">Contrôle rapide CPU, GPU, RAM, Stockage et Thermique. N\'inclut PAS d\'analyse antivirus des applications, car inspecter les paquets en 30 secondes serait très imprécis.</string>
+    <string name="scan_long_title">Analyse longue (2 heures — Recommandée)</string>
+    <string name="scan_long_desc">Tout le test rapide plus un profilage thermique prolongé et une analyse complète des applications pour activités malveillantes et permissions dangereuses via un service persistant.</string>
+    <string name="battery_opt_title">Éviter l\'interruption en arrière-plan</string>
+    <string name="battery_opt_long_scan_body">Pour éviter que l\'économiseur de batterie ne coupe l\'analyse de 2 heures, Benchy demande l\'exemption d\'optimisation de batterie.</string>
+    <string name="battery_opt_autoscan_body">Pour garantir la fiabilité de l\'antivirus quotidien automatique, Benchy recommande d\'autoriser l\'exemption d\'optimisation de batterie.</string>
+    <string name="battery_opt_allow">Autoriser l\'exemption</string>
+    <string name="battery_opt_continue_anyway">Continuer quand même</string>
+
+    <!-- Live Scan Progress -->
+    <string name="scan_in_progress_title">Analyse en cours</string>
+    <string name="scan_long_progress_title">Analyse approfondie de 2 heures active</string>
+    <string name="scan_remaining_label">Restant : %1$s</string>
+    <string name="scan_interim_score_label">Score provisoire : %1$d%%</string>
+
+    <!-- Sub-Ratings & Reviews -->
+    <string name="subrating_2d_gaming">Jeux 2D</string>
+    <string name="subrating_3d_gaming">Jeux 3D</string>
+    <string name="subrating_battery_temp">Temp. batterie</string>
+    <string name="subrating_multitasking">Multitâche</string>
+    <string name="review_tier_critical">Avertissement critique de performance : Limitation thermique sévère ou goulot matériel détecté. Les apps peuvent ralentir et la batterie chauffe. Laissez refroidir l\'appareil.</string>
+    <string name="review_tier_drag">Ralentissement modéré : Votre téléphone commence à faiblir sous charge. Libérez de l\'espace de stockage ou fermez des tâches en arrière-plan.</string>
+    <string name="review_tier_good">Bon et stable : Votre téléphone fonctionne fluidement au quotidien, pour les jeux 2D et le multitâche. Les températures sont normales.</string>
+    <string name="review_tier_peak">Performance optimale : Excellent état ! Votre matériel fonctionne à plein régime avec une grande efficacité thermique. Parfait pour les jeux 3D.</string>
+
+    <!-- Device Health Check -->
+    <string name="health_section_title">Santé de l\'appareil (1–10)</string>
+    <string name="health_battery_heat">Température batterie</string>
+    <string name="health_storage">Stockage total et libre</string>
+    <string name="health_ram">RAM disponible / libre / totale</string>
+    <string name="health_rating_badge">%1$d / 10</string>
+
+    <!-- Antivirus & App Security -->
+    <string name="security_title">Antivirus et sécurité</string>
+    <string name="security_subtitle">Inspecte les paquets installés pour détecter les combinaisons de permissions dangereuses et les sources non officielles.</string>
+    <string name="security_scan_now">Analyser les applications</string>
+    <string name="security_auto_scan_title">Analyse antivirus quotidienne</string>
+    <string name="security_auto_scan_desc">Exécutée via WorkManager toutes les %1$d heures avec alerte immédiate.</string>
+    <string name="security_zero_threats">Tout est clair — 0 menace sur %1$d applications inspectées.</string>
+    <string name="security_threats_found">%1$d paquets signalés nécessitent votre attention (%2$d inspectés).</string>
+    <string name="security_risk_high">RISQUE ÉLEVÉ</string>
+    <string name="security_risk_medium">RISQUE MOYEN</string>
+    <string name="security_risk_low">RISQUE FAIBLE</string>
+    <string name="security_allowlist_btn">Autoriser</string>
+    <string name="security_app_info_btn">Infos app</string>
+    <string name="security_allowlisted_section">Applications autorisées (%1$d)</string>
+    <string name="security_remove_allowlist">Retirer</string>
+    <string name="security_inspecting_progress">Inspection %1$d / %2$d paquets : %3$s</string>
+
+    <!-- Techy Mode Suite -->
+    <string name="techy_title">Suite de télémétrie Techy</string>
+    <string name="techy_subtitle">Routines C++17 NDK, shaders OpenGL ES 3.0, profilage thermique, capteurs en direct et suivi continu d\'énergie.</string>
+    <string name="techy_cpu_title">Benchmark CPU (C++ JNI natif)</string>
+    <string name="techy_gpu_title">Benchmark GPU (Canvas 2D &amp; OpenGL ES 3D)</string>
+    <string name="techy_ram_title">Diagnostic RAM</string>
+    <string name="techy_storage_title">Vitesse lecture/écriture stockage</string>
+    <string name="techy_battery_title">Test batterie 1 semaine (Service persistant)</string>
+    <string name="techy_throttle_title">Boucle de stress et throttling thermique</string>
+    <string name="techy_thermal_zones_title">Zones thermiques et marge</string>
+    <string name="techy_specs_title">SoC, noyau et écran</string>
+    <string name="techy_sensors_title">Capteurs matériels en direct</string>
+    <string name="techy_export_csv">Exporter CSV</string>
+    <string name="techy_export_json">Exporter JSON</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Paramètres</string>
+    <string name="settings_language_section">Langue et traduction</string>
+    <string name="settings_mode_section">Mode de diagnostic</string>
+    <string name="settings_appearance_section">Thème et apparence</string>
+    <string name="settings_card_density">Densité des cartes</string>
+    <string name="settings_units_section">Unités de mesure</string>
+    <string name="settings_alerts_section">Sons d\'alerte et planification</string>
+    <string name="settings_preview_good">Tester Ding-Ding</string>
+    <string name="settings_preview_bad">Tester Dong-Dong</string>
+    <string name="settings_mute_alerts">Couper les sons d\'alerte</string>
+    <string name="settings_autoscan_interval">Intervalle d\'analyse auto</string>
+    <string name="settings_reopen_onboarding">Rouvrir l\'accueil de premier lancement</string>
+</resources>

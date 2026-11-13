@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer minimalist gauge arc inside 66dp safe zone -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M31,68 A26,26 0 1,1 77,68"
+        android:strokeWidth="5.5"
+        android:strokeColor="#E6EDF3"
+        android:strokeLineCap="round" />
+    <!-- Precision tick marks along the gauge -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54,28 L54,32 M32,42 L35.5,44.5 M76,42 L72.5,44.5"
+        android:strokeWidth="2.5"
+        android:strokeColor="#8B949E"
+        android:strokeLineCap="round" />
+    <!-- Electric Cyan geometric telemetry pulse waveform -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M32,56 L42,56 L48,41 L55,67 L62,48 L67,56 L76,56"
+        android:strokeWidth="4.2"
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Accent anchor dot at base of gauge -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M54,70 m-3.2,0 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0" />
+</vector>

@@ -1,0 +1,6 @@
+{
+  "name": "Benchy",
+  "description": "Offline-first Android hardware benchmarking, device health diagnostics, and app security suite.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
